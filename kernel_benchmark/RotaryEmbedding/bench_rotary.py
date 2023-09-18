@@ -2,7 +2,8 @@ from typing import Optional, Tuple
 
 import torch
 import triton
-from Rotary.rotary_nn import RotaryEmbedding
+
+from nakta_model.kernel.Emb import RotaryEmbedding
 
 
 def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
