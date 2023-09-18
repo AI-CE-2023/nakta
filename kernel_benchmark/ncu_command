@@ -1,0 +1,5 @@
+sudo CUDA_LAUNCH_BLOCKING=1 /usr/local/cuda/bin/ncu --target-processes all -o rmsnorm.nsight-cuprof-report /opt/conda/bin/python test.py
+sudo CUDA_LAUNCH_BLOCKING=1 /usr/local/cuda/bin/ncu --target-processes all -o rotary.nsight-cuprof-report /opt/conda/bin/python test2.py
+
+sudo CUDA_LAUNCH_BLOCKING=1 /usr/local/cuda/bin/ncu --target-processes all -o silu.nsight-cuprof-report /opt/conda/bin/python test_silu.py
+sudo CUDA_LAUNCH_BLOCKING=1 /usr/local/cuda/bin/ncu --target-processes all -o attn.nsight-cuprof-report /opt/conda/bin/python test_attn.py
