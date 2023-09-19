@@ -4,7 +4,6 @@
 from typing import List
 
 import torch
-from torch.profiler import ProfilerActivity, profile, record_function
 
 from llama.model import Transformer
 from llama.tokenizer import Tokenizer
@@ -66,93 +65,29 @@ class LLaMA:
             decoded.append(self.tokenizer.decode(t))
         return decoded
 
-    def accuracy(
-        self,
-        prompts: List[str],
-    ):
-        bsz = len(prompts)
-        
-        prompt_tokens = [self.tokenizer.encode(x, bos=True, eos=True) for x in prompts]
-        
-        max_prompt_size = max([len(t) for t in prompt_tokens])
-
-        
-        tokens = torch.full((bsz, max_prompt_size), self.tokenizer.pad_id).cuda().long()
-        for k, t in enumerate(prompt_tokens):
-            tokens[k, : len(t)] = torch.tensor(t).long()
-        input_text_mask = tokens != self.tokenizer.pad_id
-        prev_pos = 0
-        
-        start_event = torch.cuda.Event(enable_timing=True)
-        end_event = torch.cuda.Event(enable_timing=True)
-    
-        torch.cuda.synchronize()
-        start_event.record()
-        logits = self.model.forward(tokens[:, :], prev_pos)
-        end_event.record()
-        torch.cuda.synchronize()
-        
-        return logits, start_event.elapsed_time(end_event)/1000
-    
     def prof(
         self,
         prompts: List[str],
     ):
-        
+        """
+        Profiles the forward pass of a model using a given list of prompts.
+
+        Parameters:
+        - prompts (List[str]): A list of textual prompts to be tokenized and fed into the model.
+        """
         bsz = len(prompts)
-        
+
         prompt_tokens = [self.tokenizer.encode(x, bos=True, eos=True) for x in prompts]
-        
+
         max_prompt_size = max([len(t) for t in prompt_tokens])
 
-        
         tokens = torch.full((bsz, max_prompt_size), self.tokenizer.pad_id).cuda().long()
         for k, t in enumerate(prompt_tokens):
             tokens[k, : len(t)] = torch.tensor(t).long()
-        input_text_mask = tokens != self.tokenizer.pad_id
+
         prev_pos = 0
-        
-        for i in range(20):
-            result = self.model.forward(tokens, prev_pos)
 
-        torch.cuda.synchronize()
-        with profile(activities=[
-                ProfilerActivity.CPU, ProfilerActivity.CUDA], with_stack=True) as prof:
-                with record_function("model_inference"):
-        # with profile(activities=[
-        #         ProfilerActivity.CUDA], record_shapes=True, profile_memory=True) as prof:
-                    self.model.forward(tokens, prev_pos)
-
-        print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
-    
-        torch.cuda.synchronize()
-        if torch.distributed.get_rank() == 0:
-            # prof.export_stacks('./profiler_stacks.txt', "self_cpu_time_total")
-            # pass
-            prof.export_chrome_trace("./original_trace.json")
-            # prof.export_stacks("/tmp/profiler_stacks.txt", "self_cuda_time_total")
-
-        return result
-    
-    def prof2(
-        self,
-        prompts: List[str],
-    ):
-        
-        bsz = len(prompts)
-        
-        prompt_tokens = [self.tokenizer.encode(x, bos=True, eos=True) for x in prompts]
-        
-        max_prompt_size = max([len(t) for t in prompt_tokens])
-
-        
-        tokens = torch.full((bsz, max_prompt_size), self.tokenizer.pad_id).cuda().long()
-        for k, t in enumerate(prompt_tokens):
-            tokens[k, : len(t)] = torch.tensor(t).long()
-        input_text_mask = tokens != self.tokenizer.pad_id
-        prev_pos = 0
-        
-        for i in range(2):
+        for _ in range(2):
             result = self.model.forward(tokens, prev_pos)
 
         torch.cuda.synchronize()
@@ -162,6 +97,7 @@ class LLaMA:
         torch.cuda.synchronize()
 
         return result
+
 
 def sample_top_p(probs, p):
     probs_sort, probs_idx = torch.sort(probs, dim=-1, descending=True)

@@ -1,6 +1,3 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# This software may be used and distributed according to the terms of the GNU General Public License version 3.
-
 import json
 import os
 import pickle
@@ -94,14 +91,14 @@ def main(
         for _ in range(seq_num)
     ]
 
-    results = generator.prof2(prompts)
+    results = generator.prof(prompts)
 
-    torch.save(results, "./original_profile.pt")
+    # torch.save(results, "./original_profile.pt")
 
 
 if __name__ == "__main__":
     fire.Fire(main)
 
 """
-CUDA_LAUNCH_BLOCKING=1 nsys profile -w true -t cuda,nvtx,osrt,cudnn,cublas --force-overwrite true -o original.nsys-rep torchrun --nproc_per_node 4 6_profile_original.py --ckpt_dir ./weights/original/30B --tokenizer_path ./weights/original/tokenizer.model  --max_batch_size 64
+CUDA_LAUNCH_BLOCKING=1 nsys profile -w true -t cuda,nvtx,osrt,cudnn,cublas --force-overwrite true -o ./model_profile/original.nsys-rep torchrun --nproc_per_node 4 6_profile_original.py --ckpt_dir ./weights/original/30B --tokenizer_path ./weights/original/tokenizer.model  --max_batch_size 64
 """

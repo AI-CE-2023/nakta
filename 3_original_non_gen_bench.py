@@ -1,6 +1,3 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# This software may be used and distributed according to the terms of the GNU General Public License version 3.
-
 import json
 import os
 import pickle
@@ -73,7 +70,7 @@ def main(
     max_batch_size: int = 32,
 ):
     seq_num = max_batch_size
-    
+
     local_rank, world_size = setup_model_parallel()
     if local_rank > 0:
         sys.stdout = open(os.devnull, "w")
@@ -81,37 +78,26 @@ def main(
     generator = load(
         ckpt_dir, tokenizer_path, local_rank, world_size, max_seq_len, max_batch_size
     )
-        
+
     # prompts = validation_ctx
-    prompts = ["""‘query’: 'Removing ice from car: Then, the man writes over the snow covering the window of a car, and a woman wearing winter clothes smiles. then'
+    prompts = [
+        """‘query’: 'Removing ice from car: Then, the man writes over the snow covering the window of a car, and a woman wearing winter clothes smiles. then'
     ‘choices’: [', the man adds wax to the windshield and cuts it.', ', a person board a ski lift, while two men supporting the head of the person wearing winter clothes snow as the we girls sled.', ', the man puts on a christmas coat, knitted with netting.', ', the man continues removing the snow on his car.']"""
-    for _ in range(seq_num)
+        for _ in range(seq_num)
     ]
-    results = generator.accuracy(
-        prompts
-    )
-    
-    start_event = torch.cuda.Event(enable_timing=True)
-    end_event = torch.cuda.Event(enable_timing=True)
-    
+    results = generator.accuracy(prompts)
+
     time_l = []
     num_trials = 5
     for _ in range(num_trials):
-
-        results, to_append = generator.accuracy(
-            prompts
-        )
+        results, to_append = generator.accuracy(prompts)
 
         print(to_append)
         time_l.append(to_append)
-        
+
     # torch.save(results, './test_org2.pt')
     print("original time is:", np.mean(time_l))
-    print("original batch/time :", max_batch_size/np.mean(time_l))
-    
-    # for result in results:
-    #     print(result)
-    #     print("\n==================================\n")
+    print("original batch/time :", max_batch_size / np.mean(time_l))
 
 
 if __name__ == "__main__":

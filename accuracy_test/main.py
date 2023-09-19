@@ -118,20 +118,21 @@ def main(local_rank, world_size):
         output_base_path=args.output_base_path,
     )
 
-    dumped = json.dumps(results, indent=2)
-    print(dumped)
+    if local_rank == 0:
+        dumped = json.dumps(results, indent=2)
+        print(dumped)
 
-    if args.output_path:
-        os.makedirs(os.path.dirname(args.output_path), exist_ok=True)
-        with open(args.output_path, "w") as f:
-            f.write(dumped)
+        if args.output_path:
+            os.makedirs(os.path.dirname(args.output_path), exist_ok=True)
+            with open(args.output_path, "w") as f:
+                f.write(dumped)
 
-    batch_sizes = ",".join(map(str, results["config"]["batch_sizes"]))
-    print(
-        f"{args.model} ({args.model_args}), limit: {args.limit}, provide_description: {args.provide_description}, "
-        f"num_fewshot: {args.num_fewshot}, batch_size: {args.batch_size}{f' ({batch_sizes})' if batch_sizes else ''}"
-    )
-    print(evaluator.make_table(results))
+        batch_sizes = ",".join(map(str, results["config"]["batch_sizes"]))
+        print(
+            f"{args.model} ({args.model_args}), limit: {args.limit}, provide_description: {args.provide_description}, "
+            f"num_fewshot: {args.num_fewshot}, batch_size: {args.batch_size}{f' ({batch_sizes})' if batch_sizes else ''}"
+        )
+        print(evaluator.make_table(results))
 
 
 if __name__ == "__main__":
@@ -142,4 +143,5 @@ if __name__ == "__main__":
 torchrun --nproc_per_node 4 main.py \
     --model custom \
     --tasks hellaswag 
+    --output_path ./accuracy_test_result
 """

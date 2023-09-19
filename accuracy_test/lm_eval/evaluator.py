@@ -85,7 +85,7 @@ def simple_evaluate(
         #         "device": device,
         #     },
         # )
-        print("정상 유도")
+        # print("정상 유도")
         lm = lm_eval.models.get_model(model)(**model_args.asdict())
 
         ## 모델 인스턴스 불러오기

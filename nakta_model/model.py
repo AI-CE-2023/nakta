@@ -1,6 +1,3 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# This software may be used and distributed according to the terms of the GNU General Public License version 3.
-
 import math
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -21,15 +18,6 @@ from .kernel.Emb import RotaryEmbedding
 from .kernel.Norm import RMSNorm
 from .profile import nvtx_annotate, nvtx_annotate_function
 
-ColumnParallelLinear = nvtx_annotate(ColumnParallelLinear)
-ParallelEmbedding = nvtx_annotate(ParallelEmbedding)
-RowParallelLinear = nvtx_annotate(RowParallelLinear)
-nn.Embedding = nvtx_annotate(nn.Embedding)
-RotaryEmbedding = nvtx_annotate(RotaryEmbedding)
-
-scaled_dot_product_attention = nvtx_annotate_function(scaled_dot_product_attention)
-silu_and_mul = nvtx_annotate_function(silu_and_mul)
-
 
 @dataclass
 class ModelArgs:
@@ -44,15 +32,6 @@ class ModelArgs:
     max_seq_len: int = 2048
 
 
-# triton fused layer norm 을 implement 할 필요 있을 듯
-# https://triton-lang.org/main/getting-started/tutorials/05-layer-norm.html
-
-# @nvtx_annotate_function
-# def SwiGLU(x_1, x_2):
-#     return F.silu(x_1) * x_2
-
-
-@nvtx_annotate
 class Attention(nn.Module):
     def __init__(self, args: ModelArgs):
         super().__init__()
@@ -99,8 +78,6 @@ class Attention(nn.Module):
     ):
         bsz, seqlen, _ = x.shape
 
-        # weight 곱과 view 를 한번에 하는 커널
-        # 직접구현: triton
         xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
 
         xq = xq.view(bsz, seqlen, self.n_local_heads, self.head_dim)
@@ -115,11 +92,9 @@ class Attention(nn.Module):
 
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
 
-        # native 구현
         return self.wo(output)
 
 
-@nvtx_annotate
 class FeedForward(nn.Module):
     def __init__(
         self,
@@ -142,11 +117,6 @@ class FeedForward(nn.Module):
         )
 
     def forward(self, x):
-        # fused mlp
-        # xformer triton을 implemet 하면 될 듯
-        # https://github.com/facebookresearch/xformers/blob/cfad52d18f80170e6446ec810b13e526a0e5a46d/xformers/triton/k_fused_matmul_fw.py
-        # silu 관련 triton issue
-        # https://github.com/openai/triton/issues/1836
         x1 = self.w1(x)
         x2 = self.w3(x)
         out = torch.zeros_like(x1)
@@ -154,7 +124,6 @@ class FeedForward(nn.Module):
         return self.w2(silu_and_mul(out, x1, x2))
 
 
-@nvtx_annotate
 class TransformerBlock(nn.Module):
     def __init__(self, layer_id: int, args: ModelArgs):
         super().__init__()
@@ -180,7 +149,6 @@ class TransformerBlock(nn.Module):
         return out
 
 
-@nvtx_annotate
 class Transformer(nn.Module):
     def __init__(self, params: ModelArgs):
         super().__init__()
@@ -212,3 +180,22 @@ class Transformer(nn.Module):
         h = self.norm(h)
         output = self.output(h)  # only compute last logits
         return output.float()
+
+
+import os
+
+if os.getenv("CUDA_LAUNCH_BLOCKING"):
+    ColumnParallelLinear = nvtx_annotate(ColumnParallelLinear)
+    ParallelEmbedding = nvtx_annotate(ParallelEmbedding)
+    RowParallelLinear = nvtx_annotate(RowParallelLinear)
+    nn.Embedding = nvtx_annotate(nn.Embedding)
+    RMSNorm = nvtx_annotate(RMSNorm)
+    RotaryEmbedding = nvtx_annotate(RotaryEmbedding)
+
+    Attention = nvtx_annotate(Attention)
+    FeedForward = nvtx_annotate(FeedForward)
+    TransformerBlock = nvtx_annotate(TransformerBlock)
+    Transformer = nvtx_annotate(Transformer)
+
+    scaled_dot_product_attention = nvtx_annotate_function(scaled_dot_product_attention)
+    silu_and_mul = nvtx_annotate_function(silu_and_mul)

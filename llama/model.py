@@ -4,7 +4,6 @@
 import math
 from dataclasses import dataclass
 from typing import Optional, Tuple
-from .nvtx_annotation import nvtx_annotate, nvtx_annotate_function
 
 import fairscale.nn.model_parallel.initialize as fs_init
 import torch
@@ -16,9 +15,54 @@ from fairscale.nn.model_parallel.layers import (
 )
 from torch import nn
 
-ColumnParallelLinear = nvtx_annotate(ColumnParallelLinear)
-ParallelEmbedding = nvtx_annotate(ParallelEmbedding)
-RowParallelLinear = nvtx_annotate(RowParallelLinear)
+from .nvtx_annotation import nvtx_annotate, nvtx_annotate_function
+
+
+def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
+    ndim = x.ndim
+    assert 0 <= 1 < ndim
+    assert freqs_cis.shape == (x.shape[1], x.shape[-1])
+    shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
+    return freqs_cis.view(*shape)
+
+
+def apply_rotary_emb(
+    xq: torch.Tensor,
+    xk: torch.Tensor,
+    freqs_cis: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
+    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
+    freqs_cis = reshape_for_broadcast(freqs_cis, xq_)
+    xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
+    xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
+    return xq_out.type_as(xq), xk_out.type_as(xk)
+
+
+def attention_native(xq, xk, xv, bsz, seqlen, head_dim, mask: None):
+    xq = xq.transpose(1, 2)
+    keys = xk.transpose(1, 2)
+    values = xv.transpose(1, 2)
+    scores = torch.matmul(xq, keys.transpose(2, 3)) / math.sqrt(head_dim)
+    if mask is not None:
+        scores = scores + mask  # (bs, n_local_heads, slen, cache_len + slen)
+    scores = F.softmax(scores.float(), dim=-1).type_as(xq)
+    output = torch.matmul(scores, values)  # (bs, n_local_heads, slen, head_dim)
+    output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
+    return output
+
+
+def SwiGLU(x_1, x_2):
+    return F.silu(x_1) * x_2
+
+
+def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0):
+    freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+    t = torch.arange(end, device=freqs.device)  # type: ignore
+    freqs = torch.outer(t, freqs).float()  # type: ignore
+    freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
+    return freqs_cis
+
 
 @dataclass
 class ModelArgs:
@@ -32,8 +76,8 @@ class ModelArgs:
     max_batch_size: int = 32
     max_seq_len: int = 2048
 
-@nvtx_annotate
-class RMSNorm(torch.nn.Module):
+
+class RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
@@ -46,55 +90,7 @@ class RMSNorm(torch.nn.Module):
         output = self._norm(x.float()).type_as(x)
         return output * self.weight
 
-@nvtx_annotate_function
-def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0):
-    freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
-    t = torch.arange(end, device=freqs.device)  # type: ignore
-    freqs = torch.outer(t, freqs).float()  # type: ignore
-    freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
-    return freqs_cis
 
-@nvtx_annotate_function
-def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
-    ndim = x.ndim
-    assert 0 <= 1 < ndim
-    assert freqs_cis.shape == (x.shape[1], x.shape[-1])
-    shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
-    return freqs_cis.view(*shape)
-
-@nvtx_annotate_function
-def apply_rotary_emb(
-    xq: torch.Tensor,
-    xk: torch.Tensor,
-    freqs_cis: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
-    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
-    freqs_cis = reshape_for_broadcast(freqs_cis, xq_)
-    xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
-    xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
-    return xq_out.type_as(xq), xk_out.type_as(xk)
-
-@nvtx_annotate_function
-def attention_native(xq, xk, xv, bsz, seqlen, head_dim, mask:None):
-    xq = xq.transpose(1, 2)
-    keys = xk.transpose(1, 2)
-    values = xv.transpose(1, 2)
-    scores = torch.matmul(xq, keys.transpose(2, 3)) / math.sqrt(head_dim)
-    if mask is not None:
-        scores = scores + mask  # (bs, n_local_heads, slen, cache_len + slen)
-    scores = F.softmax(scores.float(), dim=-1).type_as(xq)
-    output = torch.matmul(scores, values)  # (bs, n_local_heads, slen, head_dim)
-    output = output.transpose(
-        1, 2
-    ).contiguous().view(bsz, seqlen, -1)
-    return output
-
-@nvtx_annotate_function
-def SwiGLU(x_1, x_2):
-    return F.silu(x_1) * x_2
-
-@nvtx_annotate
 class Attention(nn.Module):
     def __init__(self, args: ModelArgs):
         super().__init__()
@@ -138,7 +134,13 @@ class Attention(nn.Module):
         #     (args.max_batch_size, args.max_seq_len, self.n_local_heads, self.head_dim)
         # ).cuda()
 
-    def forward(self, x: torch.Tensor, start_pos: int, freqs_cis: torch.Tensor, mask: Optional[torch.Tensor]):
+    def forward(
+        self,
+        x: torch.Tensor,
+        start_pos: int,
+        freqs_cis: torch.Tensor,
+        mask: Optional[torch.Tensor],
+    ):
         bsz, seqlen, _ = x.shape
         xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
 
@@ -161,7 +163,7 @@ class Attention(nn.Module):
 
         return self.wo(output)
 
-@nvtx_annotate
+
 class FeedForward(nn.Module):
     def __init__(
         self,
@@ -184,9 +186,9 @@ class FeedForward(nn.Module):
         )
 
     def forward(self, x):
-        return self.w2(SwiGLU(self.w1(x),self.w3(x)))
+        return self.w2(SwiGLU(self.w1(x), self.w3(x)))
 
-@nvtx_annotate
+
 class TransformerBlock(nn.Module):
     def __init__(self, layer_id: int, args: ModelArgs):
         super().__init__()
@@ -201,12 +203,20 @@ class TransformerBlock(nn.Module):
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
 
-    def forward(self, x: torch.Tensor, start_pos: int, freqs_cis: torch.Tensor, mask: Optional[torch.Tensor]):
-        h = x + self.attention.forward(self.attention_norm(x), start_pos, freqs_cis, mask)
+    def forward(
+        self,
+        x: torch.Tensor,
+        start_pos: int,
+        freqs_cis: torch.Tensor,
+        mask: Optional[torch.Tensor],
+    ):
+        h = x + self.attention.forward(
+            self.attention_norm(x), start_pos, freqs_cis, mask
+        )
         out = h + self.feed_forward.forward(self.ffn_norm(h))
         return out
 
-@nvtx_annotate
+
 class Transformer(nn.Module):
     def __init__(self, params: ModelArgs):
         super().__init__()
@@ -240,7 +250,9 @@ class Transformer(nn.Module):
 
         mask = None
         if seqlen > 1:
-            mask = torch.full((1, 1, seqlen, seqlen), float("-inf"), device=tokens.device)
+            mask = torch.full(
+                (1, 1, seqlen, seqlen), float("-inf"), device=tokens.device
+            )
             mask = torch.triu(mask, diagonal=start_pos + 1).type_as(h)
 
         for i, layer in enumerate(self.layers):
@@ -250,4 +262,23 @@ class Transformer(nn.Module):
         h = self.norm(h)
         output = self.output(h)
         return output.float()
-    
+
+
+import os
+
+if os.getenv("CUDA_LAUNCH_BLOCKING"):
+    ColumnParallelLinear = nvtx_annotate(ColumnParallelLinear)
+    ParallelEmbedding = nvtx_annotate(ParallelEmbedding)
+    RowParallelLinear = nvtx_annotate(RowParallelLinear)
+
+    Attention = nvtx_annotate(Attention)
+    RMSNorm = nvtx_annotate(RMSNorm)
+    FeedForward = nvtx_annotate(FeedForward)
+    TransformerBlock = nvtx_annotate(TransformerBlock)
+    Transformer = nvtx_annotate(Transformer)
+
+    reshape_for_broadcast = nvtx_annotate_function(reshape_for_broadcast)
+    apply_rotary_emb = nvtx_annotate_function(apply_rotary_emb)
+    attention_native = nvtx_annotate_function(attention_native)
+    SwiGLU = nvtx_annotate_function(SwiGLU)
+    precompute_freqs_cis = nvtx_annotate_function(precompute_freqs_cis)

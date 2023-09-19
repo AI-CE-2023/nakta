@@ -3,11 +3,9 @@ import torch.nn as nn
 import triton
 import triton.language as tl
 
-from ...profile import nvtx_annotate
-
 
 @triton.jit
-def _layer_norm_fwd_fused(
+def _rms_norm_fwd_fused(
     X,  # pointer to the input
     Y,  # pointer to the output
     W,  # pointer to the weights
@@ -60,7 +58,7 @@ class RmsNormFunction(torch.autograd.Function):
         # heuristics for number of warps
         num_warps = min(max(BLOCK_SIZE // 256, 1), 8)
         # enqueue kernel
-        _layer_norm_fwd_fused[(M,)](
+        _rms_norm_fwd_fused[(M,)](
             x_arg,
             y,
             weight,
@@ -92,7 +90,6 @@ class RMSNorm_torch(torch.nn.Module):
         return output * self.weight
 
 
-@nvtx_annotate
 class RMSNorm(torch.nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
