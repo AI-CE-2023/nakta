@@ -1,3 +1,4 @@
+import time
 from typing import List
 
 import torch
@@ -92,13 +93,41 @@ class LLaMA:
         for _ in range(2):
             result = self.model.forward(tokens, prev_pos)
 
-        torch.cuda.synchronize()
-        torch.cuda.nvtx.range_push("forward")
-        self.model.forward(tokens, prev_pos)
-        torch.cuda.nvtx.range_pop()
-        torch.cuda.synchronize()
+        for _ in range(2):
+            torch.cuda.synchronize()
+            torch.cuda.nvtx.range_push("forward")
+            result = self.model.forward(tokens, prev_pos)
+            torch.cuda.nvtx.range_pop()
+            torch.cuda.synchronize()
 
         return result
+
+    def accuracy(
+        self,
+        prompts: List[str],
+    ):
+        bsz = len(prompts)
+
+        prompt_tokens = [self.tokenizer.encode(x, bos=True, eos=True) for x in prompts]
+
+        max_prompt_size = max([len(t) for t in prompt_tokens])
+
+        tokens = torch.full((bsz, max_prompt_size), self.tokenizer.pad_id).cuda().long()
+        for k, t in enumerate(prompt_tokens):
+            tokens[k, : len(t)] = torch.tensor(t).long()
+        input_text_mask = tokens != self.tokenizer.pad_id
+        prev_pos = 0
+
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+
+        torch.cuda.synchronize()
+        start_event.record()
+        logits = self.model.forward(tokens[:, :], prev_pos)
+        end_event.record()
+        torch.cuda.synchronize()
+
+        return logits, start_event.elapsed_time(end_event) / 1000
 
 
 def sample_top_p(probs, p):

@@ -85,16 +85,16 @@ def main(
     )
     # with open("./ds/validation_ctx.pkl", "rb") as f:
     #     validation_ctx = pickle.load(f)[:64]
-    # prompts = [
-    #     "Removing ice from car: Then, the man writes over the snow covering the window of a car, and a woman wearing winter clothes smiles. then , the man adds wax to the windshield and cuts it."
-    #     for _ in range(seq_num)
-    # ]
-
     prompts = [
-        """‘query’: 'Removing ice from car: Then, the man writes over the snow covering the window of a car, and a woman wearing winter clothes smiles. then'
-    ‘choices’: [', the man adds wax to the windshield and cuts it.', ', a person board a ski lift, while two men supporting the head of the person wearing winter clothes snow as the we girls sled.', ', the man puts on a christmas coat, knitted with netting.', ', the man continues removing the snow on his car.']"""
+        "Removing ice from car: Then, the man writes over the snow covering the window of a car, and a woman wearing winter clothes smiles. then , the man adds wax to the windshield and cuts it."
         for _ in range(seq_num)
     ]
+
+    # prompts = [
+    #     """‘query’: 'Removing ice from car: Then, the man writes over the snow covering the window of a car, and a woman wearing winter clothes smiles. then'
+    # ‘choices’: [', the man adds wax to the windshield and cuts it.', ', a person board a ski lift, while two men supporting the head of the person wearing winter clothes snow as the we girls sled.', ', the man puts on a christmas coat, knitted with netting.', ', the man continues removing the snow on his car.']"""
+    #     for _ in range(seq_num)
+    # ]
 
     results = generator.prof(prompts)
 
@@ -105,5 +105,5 @@ if __name__ == "__main__":
     fire.Fire(main)
 
 """
-CUDA_LAUNCH_BLOCKING=1 nsys profile -w true -t cuda,nvtx,osrt,cudnn,cublas --force-overwrite true -o ./model_profile/nakata.nsys-rep torchrun --nproc_per_node 4 5_profile_nakta.py --ckpt_dir ./weights/original/30B_n --tokenizer_path ./weights/original/tokenizer.model  --max_batch_size 64
+CUDA_LAUNCH_BLOCKING=1 nsys profile -w true -t cuda,nvtx,osrt,cudnn,cublas --force-overwrite true -o ./model_profile/nakata2_2.nsys-rep torchrun --nproc_per_node 4 5_profile_nakta.py --ckpt_dir ./weights/modified/30B_2 --tokenizer_path ./weights/original/tokenizer.model  --max_batch_size 128
 """

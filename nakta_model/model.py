@@ -39,16 +39,9 @@ class Attention(nn.Module):
         self.n_local_heads = args.n_heads // fs_init.get_model_parallel_world_size()
         self.head_dim = args.dim // args.n_heads
 
-        self.wq = ColumnParallelLinear(
+        self.wqk = ColumnParallelLinear(
             args.dim,
-            args.n_heads * self.head_dim,
-            bias=False,
-            gather_output=False,
-            init_method=lambda x: x,
-        )
-        self.wk = ColumnParallelLinear(
-            args.dim,
-            args.n_heads * self.head_dim,
+            args.n_heads * self.head_dim * 2,
             bias=False,
             gather_output=False,
             init_method=lambda x: x,
@@ -60,6 +53,7 @@ class Attention(nn.Module):
             gather_output=False,
             init_method=lambda x: x,
         )
+
         self.wo = RowParallelLinear(
             args.n_heads * self.head_dim,
             args.dim,
@@ -71,6 +65,8 @@ class Attention(nn.Module):
             dim=self.head_dim, max_seq_len=512, interleaved=True
         )
 
+        self.split_val = args.n_heads * self.head_dim
+
     def forward(
         self,
         x: torch.Tensor,
@@ -78,12 +74,15 @@ class Attention(nn.Module):
     ):
         bsz, seqlen, _ = x.shape
 
-        xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
+        xqk = self.wqk(x)
+        xv = self.wv(x)
 
-        xq = xq.view(bsz, seqlen, self.n_local_heads, self.head_dim)
-        xk = xk.view(bsz, seqlen, self.n_local_heads, self.head_dim)
+        # xq = xq.view(bsz, seqlen, self.n_local_heads, self.head_dim)
+        # xk = xk.view(bsz, seqlen, self.n_local_heads, self.head_dim)
+        xqk = xqk.view(bsz, seqlen, 2, self.n_local_heads, self.head_dim)
         xv = xv.view(bsz, seqlen, self.n_local_heads, self.head_dim)
-        xq, xk = self.rotary_emb(xq, xk)
+
+        xq, xk = self.rotary_emb(xqk)
         xq = xq.transpose(1, 2)
         keys = xk.transpose(1, 2)
         values = xv.transpose(1, 2)
@@ -104,16 +103,28 @@ class FeedForward(nn.Module):
     ):
         super().__init__()
         hidden_dim = int(2 * hidden_dim / 3)
-        hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
+        self.hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
 
         self.w1 = ColumnParallelLinear(
-            dim, hidden_dim, bias=False, gather_output=False, init_method=lambda x: x
+            dim,
+            self.hidden_dim,
+            bias=False,
+            gather_output=False,
+            init_method=lambda x: x,
         )
         self.w2 = RowParallelLinear(
-            hidden_dim, dim, bias=False, input_is_parallel=True, init_method=lambda x: x
+            self.hidden_dim,
+            dim,
+            bias=False,
+            input_is_parallel=True,
+            init_method=lambda x: x,
         )
         self.w3 = ColumnParallelLinear(
-            dim, hidden_dim, bias=False, gather_output=False, init_method=lambda x: x
+            dim,
+            self.hidden_dim,
+            bias=False,
+            gather_output=False,
+            init_method=lambda x: x,
         )
 
     def forward(self, x):

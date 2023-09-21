@@ -195,8 +195,7 @@ class RotaryEmbedding(torch.nn.Module):
 
     def forward(
         self,
-        q: torch.Tensor,
-        k: torch.Tensor,
+        qk: torch.Tensor,
         seqlen_offset: Union[int, torch.Tensor] = 0,
         max_seqlen: Optional[int] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -211,7 +210,7 @@ class RotaryEmbedding(torch.nn.Module):
         Apply rotary embedding *inplace* to qkv and / or kv.
         """
         # seqlen = q.shape[1]
-        qk = torch.stack([q, k], dim=2)
+        # qk = torch.stack([q, k], dim=2)
         # if max_seqlen is not None:
         #     self._update_cos_sin_cache(max_seqlen, device=q.device, dtype=q.dtype)
         # elif isinstance(seqlen_offset, int):

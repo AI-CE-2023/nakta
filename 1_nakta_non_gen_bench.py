@@ -42,6 +42,7 @@ def load(
     ), f"Loading a checkpoint for MP={len(checkpoints)} but world size is {world_size}"
     ckpt_path = checkpoints[local_rank]
     print("Loading")
+    print(ckpt_path)
     checkpoint = torch.load(ckpt_path, map_location="cpu")
     with open(Path(ckpt_dir) / "params.json", "r") as f:
         params = json.loads(f.read())
@@ -79,31 +80,34 @@ def main(
         ckpt_dir, tokenizer_path, local_rank, world_size, max_seq_len, max_batch_size
     )
 
+    # prompts = [
+    #     """‘query’: 'Removing ice from car: Then, the man writes over the snow covering the window of a car, and a woman wearing winter clothes smiles. then'
+    # ‘choices’: [', the man adds wax to the windshield and cuts it.', ', a person board a ski lift, while two men supporting the head of the person wearing winter clothes snow as the we girls sled.', ', the man puts on a christmas coat, knitted with netting.', ', the man continues removing the snow on his car.']"""
+    #     for _ in range(seq_num)
+    # ]
     prompts = [
-        """‘query’: 'Removing ice from car: Then, the man writes over the snow covering the window of a car, and a woman wearing winter clothes smiles. then'
-    ‘choices’: [', the man adds wax to the windshield and cuts it.', ', a person board a ski lift, while two men supporting the head of the person wearing winter clothes snow as the we girls sled.', ', the man puts on a christmas coat, knitted with netting.', ', the man continues removing the snow on his car.']"""
+        "Removing ice from car: Then, the man writes over the snow covering the window of a car, and a woman wearing winter clothes smiles. then , the man adds wax to the windshield and cuts it."
         for _ in range(seq_num)
     ]
 
-    for i in range(5):
+    for i in range(10):
         results = generator.accuracy(prompts)
 
     time_l = []
-    num_trials = 5
+    num_trials = 10
     for _ in range(num_trials):
         results, to_append = generator.accuracy(prompts)
 
         print(to_append)
         time_l.append(to_append)
-
-    print("mem-eff time is:", np.mean(time_l))
-    print("mem-eff batch/time :", max_batch_size / np.mean(time_l))
-    # torch.save(results, './test_custom.pt')
+    print("nakta time is:", np.mean(time_l))
+    print("nakta batch/time :", max_batch_size / np.mean(time_l))
+    # torch.save(results, "./test_custom.pt")
 
 
 if __name__ == "__main__":
     fire.Fire(main)
 
 """
-torchrun --nproc_per_node 4 1_nakta_non_gen_bench.py --ckpt_dir ./weights/original/30B --tokenizer_path ./weights/original/tokenizer.model  --max_batch_size 64
+torchrun --nproc_per_node 4 1_nakta_non_gen_bench.py --ckpt_dir ./weights/modified/30B_2 --tokenizer_path ./weights/original/tokenizer.model  --max_batch_size 128
 """

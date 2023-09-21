@@ -22,8 +22,8 @@ for weight in weights:
         weight[prefix + "wqk.weight"] = wattn.cpu()
 
         # 기존의 weights 삭제
+        del weight[prefix + "wq.weight"]
         del weight[prefix + "wk.weight"]
-        del weight[prefix + "wv.weight"]
 
     # Feed Forward weights 합치기
     # for i in range(num_layers):  # 0부터 15까지의 layer 번호 가정

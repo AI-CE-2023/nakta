@@ -80,22 +80,26 @@ def main(
     )
 
     # prompts = validation_ctx
+    # prompts = [
+    #     """‘query’: 'Removing ice from car: Then, the man writes over the snow covering the window of a car, and a woman wearing winter clothes smiles. then'
+    # ‘choices’: [', the man adds wax to the windshield and cuts it.', ', a person board a ski lift, while two men supporting the head of the person wearing winter clothes snow as the we girls sled.', ', the man puts on a christmas coat, knitted with netting.', ', the man continues removing the snow on his car.']"""
+    #     for _ in range(seq_num)
+    # ]
     prompts = [
-        """‘query’: 'Removing ice from car: Then, the man writes over the snow covering the window of a car, and a woman wearing winter clothes smiles. then'
-    ‘choices’: [', the man adds wax to the windshield and cuts it.', ', a person board a ski lift, while two men supporting the head of the person wearing winter clothes snow as the we girls sled.', ', the man puts on a christmas coat, knitted with netting.', ', the man continues removing the snow on his car.']"""
+        "Removing ice from car: Then, the man writes over the snow covering the window of a car, and a woman wearing winter clothes smiles. then , the man adds wax to the windshield and cuts it."
         for _ in range(seq_num)
     ]
-    results = generator.accuracy(prompts)
+    for i in range(10):
+        results = generator.accuracy(prompts)
 
     time_l = []
-    num_trials = 5
+    num_trials = 10
     for _ in range(num_trials):
         results, to_append = generator.accuracy(prompts)
 
         print(to_append)
         time_l.append(to_append)
-
-    # torch.save(results, './test_org2.pt')
+    # torch.save(results, "./test_org2.pt")
     print("original time is:", np.mean(time_l))
     print("original batch/time :", max_batch_size / np.mean(time_l))
 
@@ -103,5 +107,5 @@ def main(
 if __name__ == "__main__":
     fire.Fire(main)
 """
-torchrun --nproc_per_node 4 3_original_non_gen_bench.py --ckpt_dir ./weights/original/30B --tokenizer_path ./weights/original/tokenizer.model --max_batch_size 64
+torchrun --nproc_per_node 4 3_original_non_gen_bench.py --ckpt_dir ./weights/original/30B --tokenizer_path ./weights/original/tokenizer.model --max_batch_size 128
 """
