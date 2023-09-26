@@ -11,8 +11,8 @@ from fairscale.nn.model_parallel.initialize import initialize_model_parallel
 
 @dataclass
 class ModelArgs:
-    ckpt_dir: str = "../weights/original/30B_n"
-    tokenizer_path: str = "../weights/original/tokenizer.model"
+    ckpt_dir: str
+    tokenizer_path: str
     local_rank: int = 0
     world_size: int = 1
     max_seq_len: int = 512
@@ -44,7 +44,8 @@ logging.getLogger("openai").setLevel(logging.WARNING)
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", required=True)
-    parser.add_argument("--model_args", default="")
+    parser.add_argument("--ckpt_dir", required=True)
+    parser.add_argument("--tokenizer_path", required=True)
     parser.add_argument(
         "--tasks", default=None, choices=utils.MultiChoice(tasks.ALL_TASKS)
     )
@@ -99,7 +100,12 @@ def main(local_rank, world_size):
         with open(args.description_dict_path, "r") as f:
             description_dict = json.load(f)
 
-    model_args = ModelArgs(local_rank=local_rank, world_size=world_size)
+    model_args = ModelArgs(
+        ckpt_dir=args.ckpt_dir,
+        tokenizer_path=args.tokenizer_path,
+        local_rank=local_rank,
+        world_size=world_size,
+    )
 
     results = evaluator.simple_evaluate(
         model=args.model,
@@ -127,11 +133,6 @@ def main(local_rank, world_size):
             with open(args.output_path, "w") as f:
                 f.write(dumped)
 
-        batch_sizes = ",".join(map(str, results["config"]["batch_sizes"]))
-        print(
-            f"{args.model} ({args.model_args}), limit: {args.limit}, provide_description: {args.provide_description}, "
-            f"num_fewshot: {args.num_fewshot}, batch_size: {args.batch_size}{f' ({batch_sizes})' if batch_sizes else ''}"
-        )
         print(evaluator.make_table(results))
 
 
@@ -141,7 +142,17 @@ if __name__ == "__main__":
 
 """
 torchrun --nproc_per_node 4 main.py \
-    --model custom \
+    --model nakta \
+    --ckpt_dir ../weights/modified/30B_2 \
+    --tokenizer_path ../weights/original/tokenizer.model
     --tasks hellaswag 
-    --output_path ./accuracy_test_result
+    --output_path ./accuracy_test_result_nakta 
+"""
+"""
+torchrun --nproc_per_node 4 main.py \
+    --model llama \
+    --ckpt_dir ../weights/original/30B \
+    --tokenizer_path ../weights/original/tokenizer.model \
+    --tasks hellaswag 
+    --output_path ./accuracy_test_result_llama 
 """

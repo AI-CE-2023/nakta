@@ -37,12 +37,7 @@ class LLaMA:
         start_pos = min_prompt_size
         prev_pos = 0
         for cur_pos in range(start_pos, total_len):
-            with torch.backends.cuda.sdp_kernel(
-                enable_flash=False,
-                enable_math=False,
-                enable_mem_efficient=True,
-            ):
-                logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
+            logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
             if temperature > 0:
                 probs = torch.softmax(logits / temperature, dim=-1)
                 next_token = sample_top_p(probs, top_p)
@@ -128,6 +123,9 @@ class LLaMA:
         torch.cuda.synchronize()
 
         return logits, start_event.elapsed_time(end_event) / 1000
+
+    def bench(self, tokens):
+        self.model.forward(tokens[:, :], 0)
 
 
 def sample_top_p(probs, p):

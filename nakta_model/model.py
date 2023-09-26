@@ -184,13 +184,18 @@ class Transformer(nn.Module):
 
     @torch.inference_mode()
     def forward(self, tokens: torch.Tensor, start_pos: int):
-        _bsz, seqlen = tokens.shape
-        h = self.tok_embeddings(tokens)
-        for i, layer in enumerate(self.layers):
-            h = layer(h, start_pos)
-        h = self.norm(h)
-        output = self.output(h)  # only compute last logits
-        return output.float()
+        with torch.backends.cuda.sdp_kernel(
+                enable_flash=True,
+                enable_math=False,
+                enable_mem_efficient=False,
+        ):
+            _bsz, seqlen = tokens.shape
+            h = self.tok_embeddings(tokens)
+            for i, layer in enumerate(self.layers):
+                h = layer(h, start_pos)
+            h = self.norm(h)
+            output = self.output(h)  # only compute last logits
+            return output.float()
 
 
 import os

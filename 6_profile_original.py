@@ -11,7 +11,7 @@ import numpy as np
 import torch
 from fairscale.nn.model_parallel.initialize import initialize_model_parallel
 
-from llama import LLaMA, ModelArgs, Tokenizer, Transformer
+from llama_org import LLaMA, ModelArgs, Tokenizer, Transformer
 
 
 def setup_model_parallel() -> Tuple[int, int]:

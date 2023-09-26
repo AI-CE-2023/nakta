@@ -1,4 +1,4 @@
-from . import custom
+from . import llama, nakta
 
 MODEL_REGISTRY = {
     # "hf": gpt2.HFLM,
@@ -10,7 +10,8 @@ MODEL_REGISTRY = {
     # "anthropic": anthropic_llms.AnthropicLM,
     # "textsynth": textsynth.TextSynthLM,
     # "dummy": dummy.DummyLM,
-    "custom": custom.LLAMA,
+    "nakta": nakta.Nakta_ACC,
+    "llama": llama.LLama_ACC,
 }
 
 
