@@ -17,7 +17,7 @@ class ModelArgs:
     world_size: int = 1
     max_seq_len: int = 512
     max_batch_size: int = 128
-    batch_size: int = 64
+    batch_size: int = 1
 
     def asdict(self):
         return asdict(self)

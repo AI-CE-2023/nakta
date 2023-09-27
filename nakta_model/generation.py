@@ -63,25 +63,17 @@ class LLaMA:
             decoded.append(self.tokenizer.decode(t))
         return decoded
 
-    def prof(
-        self,
-        prompts: List[str],
-    ):
+    def prof(self, seq_len: int, batch_size: int):
         """
-        Profiles the forward pass of a model using a given list of prompts.
+        Profiles the forward pass of a model using given seq_len and batch_size.
 
         Parameters:
-        - prompts (List[str]): A list of textual prompts to be tokenized and fed into the model.
+        - seq_len (int): The sequence length for the input tokens.
+        - batch_size (int): The number of samples in the batch.
         """
-        bsz = len(prompts)
 
-        prompt_tokens = [self.tokenizer.encode(x, bos=True, eos=True) for x in prompts]
-
-        max_prompt_size = max([len(t) for t in prompt_tokens])
-
-        tokens = torch.full((bsz, max_prompt_size), self.tokenizer.pad_id).cuda().long()
-        for k, t in enumerate(prompt_tokens):
-            tokens[k, : len(t)] = torch.tensor(t).long()
+        # Generate random integers between 1 and 32000
+        tokens = torch.randint(1, 32001, (batch_size, seq_len)).cuda().long()
 
         prev_pos = 0
 

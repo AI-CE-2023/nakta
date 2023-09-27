@@ -90,10 +90,7 @@ def main(
         #     "Removing ice from car: Then, the man writes over the snow covering the window of a car, and a woman wearing winter clothes smiles. then , the man adds wax to the windshield and cuts it."
         #     for _ in range(seq_num)
         # ]
-        prompts = [
-            "Walking the dog: A woman walks out onto the grass. two small dogs follow her on leashes."
-            for _ in range(seq_num)
-        ]
+        prompts = ["Walking" for _ in range(seq_num)]
         for i in range(10):
             results = generator.accuracy(prompts)
 

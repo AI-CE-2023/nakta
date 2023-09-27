@@ -10,7 +10,9 @@ import fire
 import numpy as np
 import torch
 from fairscale.nn.model_parallel.initialize import initialize_model_parallel
-from sch import SpeedDataset
+from sch.sch3 import SpeedDataset, collate_fn
+from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from nakta_model import LLaMA, ModelArgs, Tokenizer, Transformer
 
@@ -78,19 +80,29 @@ def main(
         ckpt_dir, tokenizer_path, local_rank, world_size, max_seq_len, max_batch_size
     )
 
-    with open("../dataset/validation_data_v1.pickle", "rb") as fr:
-        validset = pickle.load(fr)["train"].tolist()
+    # with open("../dataset/validation_data_v1.pickle", "rb") as fr:
+    #     validset = pickle.load(fr)["train"].tolist()
+
+    with open("./test.pickle", "rb") as fr:
+        validset = pickle.load(fr)
 
     valid_datas = SpeedDataset(
-        validset, tokenizer_path=tokenizer_path, order="random", default_batch_size=1
+        validset,
+        tokenizer_path=tokenizer_path,
+        order="descending",
+        default_batch_size=120,
+        device=f"cuda:{local_rank}",
+    )
+
+    dataloader = DataLoader(
+        valid_datas, batch_size=1, shuffle=True, collate_fn=collate_fn
     )
 
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
-
     torch.cuda.synchronize()
     start_event.record()
-    for batch in valid_datas:
+    for batch in tqdm(dataloader):
         generator.bench(batch)
     end_event.record()
     torch.cuda.synchronize()
@@ -99,7 +111,11 @@ def main(
 
 
 if __name__ == "__main__":
-    fire.Fire(main)
+    main(
+        ckpt_dir="../weights/modified/30B_2",
+        tokenizer_path="../weights/original/tokenizer.model",
+    )
+
 """
-torchrun --nproc_per_node 4 3_original_non_gen_bench.py --ckpt_dir ./weights/original/30B --tokenizer_path ./weights/original/tokenizer.model --max_batch_size 128
+torchrun --nproc_per_node 4 nakta_speed.py
 """

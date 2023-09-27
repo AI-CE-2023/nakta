@@ -66,25 +66,17 @@ class LLaMA:
             decoded.append(self.tokenizer.decode(t))
         return decoded
 
-    def prof(
-        self,
-        prompts: List[str],
-    ):
+    def prof(self, seq_len: int, batch_size: int):
         """
-        Profiles the forward pass of a model using a given list of prompts.
+        Profiles the forward pass of a model using given seq_len and batch_size.
 
         Parameters:
-        - prompts (List[str]): A list of textual prompts to be tokenized and fed into the model.
+        - seq_len (int): The sequence length for the input tokens.
+        - batch_size (int): The number of samples in the batch.
         """
-        bsz = len(prompts)
 
-        prompt_tokens = [self.tokenizer.encode(x, bos=True, eos=True) for x in prompts]
-
-        max_prompt_size = max([len(t) for t in prompt_tokens])
-
-        tokens = torch.full((bsz, max_prompt_size), self.tokenizer.pad_id).cuda().long()
-        for k, t in enumerate(prompt_tokens):
-            tokens[k, : len(t)] = torch.tensor(t).long()
+        # Generate random integers between 1 and 32000
+        tokens = torch.randint(1, 32001, (batch_size, seq_len)).cuda().long()
 
         prev_pos = 0
 
@@ -94,7 +86,7 @@ class LLaMA:
         for _ in range(2):
             torch.cuda.synchronize()
             torch.cuda.nvtx.range_push("forward")
-            self.model.forward(tokens, prev_pos)
+            result = self.model.forward(tokens, prev_pos)
             torch.cuda.nvtx.range_pop()
             torch.cuda.synchronize()
 
@@ -128,7 +120,7 @@ class LLaMA:
         return logits, start_event.elapsed_time(end_event) / 1000
 
     def bench(self, tokens):
-        self.model.forward(tokens[:, :], 0)
+        self.model.forward(tokens, 0)
 
 
 def sample_top_p(probs, p):

@@ -656,8 +656,8 @@ class _attention(torch.autograd.Function):
 attention = _attention.apply
 
 
-# @pytest.mark.parametrize("Z, H, N_CTX, D_HEAD", [(1, 2, 1024, 64)])
-# @pytest.mark.parametrize("causal", [True])
+@pytest.mark.parametrize("Z, H, N_CTX, D_HEAD", [(1, 2, 1024, 64)])
+@pytest.mark.parametrize("causal", [True])
 def test_op(Z, H, N_CTX, D_HEAD, causal, dtype=torch.float16):
     torch.manual_seed(20)
     q = (
@@ -781,6 +781,4 @@ def bench_flash_attention(
 
 
 # only works on post-Ampere GPUs right now
-# bench_flash_attention.run(save_path=".", print_data=True)
-
-test_op(10, 20, 13, 64, True)
+bench_flash_attention.run(save_path=".", print_data=True)
