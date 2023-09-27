@@ -67,11 +67,11 @@ class Attention(nn.Module):
 
         self.split_val = args.n_heads * self.head_dim
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        start_pos: int,
-    ):
+        self.xq_cache = {}
+        self.xk_cache = {}
+        self.xv_cache = {}
+
+    def forward(self, x: torch.Tensor, cache_info, layer_id):
         bsz, seqlen, _ = x.shape
 
         xqk = self.wqk(x)
@@ -81,15 +81,42 @@ class Attention(nn.Module):
         # xk = xk.view(bsz, seqlen, self.n_local_heads, self.head_dim)
         xqk = xqk.view(bsz, seqlen, 2, self.n_local_heads, self.head_dim)
         xv = xv.view(bsz, seqlen, self.n_local_heads, self.head_dim)
+        if cache_info[0] == 0:
+            xq, xk = self.rotary_emb(xqk, seqlen_offset=0)
+            self.xq_cache[cache_info[1]] = xq
+            self.xk_cache[cache_info[1]] = xk
+            self.xv_cache[cache_info[1]] = xv
+        else:
+            # Load the cached values and expand them along the batch dimension
+            xq_cached = self.xq_cache[cache_info[1]].repeat(4, 1, 1, 1)
+            xk_cached = self.xk_cache[cache_info[1]].repeat(4, 1, 1, 1)
+            xv_cached = self.xv_cache[cache_info[1]].repeat(4, 1, 1, 1)
 
-        xq, xk = self.rotary_emb(xqk)
-        xq = xq.transpose(1, 2)
-        keys = xk.transpose(1, 2)
-        values = xv.transpose(1, 2)
+            # Compute the new rotary embeddings for xq and xk
+            xq_new, xk_new = self.rotary_emb(xqk, seqlen_offset=cache_info[0])
+            # print(xq_cached.shape)
+            # print(xq_new.shape)
+            # Concatenate the cached values with the new values
+            xq = torch.cat((xq_cached, xq_new), dim=1)
+            xk = torch.cat((xk_cached, xk_new), dim=1)
+            xv = torch.cat((xv_cached, xv), dim=1)
+            # print(xq.shape)
+
+        # xq, xk = self.rotary_emb(xqk, seqlen_offset=)
+        xq = xq.transpose(1, 2).contiguous()
+        keys = xk.transpose(1, 2).contiguous()
+        values = xv.transpose(1, 2).contiguous()
 
         output = scaled_dot_product_attention(xq, keys, values, is_causal=True)
-
-        output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
+        # if cache_info[0] != 0:
+        #     print(output.shape)
+        output = (
+            output.transpose(1, 2).contiguous().view(bsz, seqlen + cache_info[0], -1)
+        )
+        if layer_id != 59:
+            output = output[:, cache_info[0] :, :]
+        # if cache_info[0] != 0:
+        #     print(output.shape)
 
         return self.wo(output)
 
@@ -149,13 +176,31 @@ class TransformerBlock(nn.Module):
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
 
+        self.cached_x = {}
+
     def forward(
         self,
         x: torch.Tensor,
-        start_pos: int,
+        cache_info,
         # mask: Optional[torch.Tensor],
     ):
-        h = x + self.attention.forward(self.attention_norm(x), start_pos)
+        if cache_info[0] != 0 and self.layer_id == 59:
+            x_concat = torch.cat(
+                (self.cached_x[cache_info[1]].repeat(4, 1, 1), x), dim=1
+            )
+            h = x_concat + self.attention.forward(
+                self.attention_norm(x), cache_info, self.layer_id
+            )
+        elif cache_info[0] == 0 and self.layer_id == 59:
+            self.cached_x[cache_info[1]] = x
+            h = x + self.attention.forward(
+                self.attention_norm(x), cache_info, self.layer_id
+            )
+        else:
+            h = x + self.attention.forward(
+                self.attention_norm(x), cache_info, self.layer_id
+            )
+
         out = h + self.feed_forward.forward(self.ffn_norm(h))
         return out
 
@@ -183,16 +228,19 @@ class Transformer(nn.Module):
         )
 
     @torch.inference_mode()
-    def forward(self, tokens: torch.Tensor, start_pos: int):
+    def forward(self, tokens: torch.Tensor, cache_info):
+        """
+        cache_info: Tuple(seqlen_offset: int, cache_key: int)
+        """
         with torch.backends.cuda.sdp_kernel(
-                enable_flash=True,
-                enable_math=False,
-                enable_mem_efficient=False,
+            enable_flash=True,
+            enable_math=False,
+            enable_mem_efficient=False,
         ):
             _bsz, seqlen = tokens.shape
             h = self.tok_embeddings(tokens)
             for i, layer in enumerate(self.layers):
-                h = layer(h, start_pos)
+                h = layer(h, cache_info)
             h = self.norm(h)
             output = self.output(h)  # only compute last logits
             return output.float()
@@ -214,4 +262,5 @@ if os.getenv("CUDA_LAUNCH_BLOCKING"):
     Transformer = nvtx_annotate(Transformer)
 
     scaled_dot_product_attention = nvtx_annotate_function(scaled_dot_product_attention)
+    silu_and_mul = nvtx_annotate_function(silu_and_mul)
     silu_and_mul = nvtx_annotate_function(silu_and_mul)

@@ -63,7 +63,7 @@ class LLaMA:
             decoded.append(self.tokenizer.decode(t))
         return decoded
 
-    def prof(self, seq_len: int, batch_size: int):
+    def prof(self, ctx_len: int, follow_len: int, batch_size: int):
         """
         Profiles the forward pass of a model using given seq_len and batch_size.
 
@@ -73,17 +73,27 @@ class LLaMA:
         """
 
         # Generate random integers between 1 and 32000
-        tokens = torch.randint(1, 32001, (batch_size, seq_len)).cuda().long()
+        ctx_tokens = torch.randint(1, 32001, (batch_size // 4, ctx_len)).cuda().long()
+        follow_tokens = torch.randint(1, 32001, (batch_size, follow_len)).cuda().long()
 
         prev_pos = 0
 
-        for _ in range(2):
-            result = self.model.forward(tokens, prev_pos)
+        # for _ in range(2):
+        self.model.forward(ctx_tokens, (0, 1))
+        self.model.forward(follow_tokens, (ctx_len, 1))
 
         for _ in range(2):
             torch.cuda.synchronize()
             torch.cuda.nvtx.range_push("forward")
-            result = self.model.forward(tokens, prev_pos)
+
+            torch.cuda.nvtx.range_push("ctx")
+            self.model.forward(ctx_tokens, (0, 1))
+            torch.cuda.nvtx.range_pop()
+
+            torch.cuda.nvtx.range_push("follow")
+            result = self.model.forward(ctx_tokens, (ctx_len, 1))
+            torch.cuda.nvtx.range_pop()
+
             torch.cuda.nvtx.range_pop()
             torch.cuda.synchronize()
 

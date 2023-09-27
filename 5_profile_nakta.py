@@ -66,7 +66,8 @@ def main(
     tokenizer_path: str,
     max_seq_len: int = 512,
     max_batch_size: int = 32,
-    seq_len: int = 128,
+    ctx_len: int = 60,
+    follow_len: int = 40,
 ):
     seq_num = max_batch_size
 
@@ -83,14 +84,13 @@ def main(
         max_batch_size,
     )
 
-    results = generator.prof(seq_len, seq_num)
-
-    # torch.save(results, "./custom_profile.pt")
+    results = generator.prof(ctx_len, follow_len, seq_num)
+    torch.save(results, "./nakta.pt")
 
 
 if __name__ == "__main__":
     fire.Fire(main)
 
 """
-CUDA_LAUNCH_BLOCKING=1 nsys profile -w true -t cuda,nvtx,osrt,cudnn,cublas --force-overwrite true -o ./model_profile/nakta_3090.nsys-rep torchrun --nproc_per_node 4 5_profile_nakta.py --ckpt_dir ./weights/modified/30B_2 --tokenizer_path ./weights/original/tokenizer.model  --max_batch_size 128 --seq_len 100
+CUDA_LAUNCH_BLOCKING=1 nsys profile -w true -t cuda,nvtx,osrt,cudnn,cublas --force-overwrite true -o ./model_profile/nakta_3090_cache.nsys-rep torchrun --nproc_per_node 4 5_profile_nakta.py --ckpt_dir ./weights/modified/30B_2 --tokenizer_path ./weights/original/tokenizer.model  --max_batch_size 128
 """
