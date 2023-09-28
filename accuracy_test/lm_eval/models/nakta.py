@@ -85,6 +85,8 @@ class Nakta_ACC(BaseLM):
     ):
         super().__init__()
 
+        self.model_name = "nakta"
+
         self._device = local_rank
 
         self.model, self.tokenizer = load(
@@ -157,7 +159,7 @@ class Nakta_ACC(BaseLM):
     def tok_decode(self, tokens):
         return self.tokenizer.decode(tokens)
 
-    def _model_call(self, inps):
+    def _model_call(self, inps, ctx_info):
         """
         inps: a torch tensor of shape [batch, sequence]
         the size of sequence may vary from call to call
@@ -166,7 +168,7 @@ class Nakta_ACC(BaseLM):
         logits returned from the model
         """
         with torch.no_grad():
-            return self.model(inps, 0)
+            return self.model(inps, ctx_info)
 
     def _model_generate(self, context, max_length, eos_token_id):
         generation_kwargs = {"do_sample": False, "max_length": max_length}

@@ -66,7 +66,8 @@ def main(
     tokenizer_path: str,
     max_seq_len: int = 512,
     max_batch_size: int = 32,
-    seq_len: int = 100,
+    ctx_len: int = 60,
+    follow_len: int = 40,
 ):
     seq_num = max_batch_size
 
@@ -75,17 +76,21 @@ def main(
         sys.stdout = open(os.devnull, "w")
 
     generator = load(
-        ckpt_dir, tokenizer_path, local_rank, world_size, max_seq_len, max_batch_size
+        ckpt_dir,
+        tokenizer_path,
+        local_rank,
+        world_size,
+        max_seq_len,
+        max_batch_size,
     )
 
-    results = generator.prof(seq_len, seq_num)
-
-    # torch.save(results, "./original_profile.pt")
+    results = generator.prof(ctx_len, follow_len, seq_num)
+    # torch.save(results, "./original.pt")
 
 
 if __name__ == "__main__":
     fire.Fire(main)
 
 """
-CUDA_LAUNCH_BLOCKING=1 nsys profile -w true -t cuda,nvtx,osrt,cudnn,cublas --force-overwrite true -o ./model_profile/original_3090.nsys-rep torchrun --nproc_per_node 4 6_profile_original.py --ckpt_dir ./weights/original/30B --tokenizer_path ./weights/original/tokenizer.model  --max_batch_size 128 --seq_len 100
+CUDA_LAUNCH_BLOCKING=1 nsys profile -w true -t cuda,nvtx,osrt,cudnn,cublas --force-overwrite true -o ./model_profile/original_cache.nsys-rep torchrun --nproc_per_node 4 6_profile_original.py --ckpt_dir ./weights/original/30B --tokenizer_path ./weights/original/tokenizer.model  --max_batch_size 1
 """

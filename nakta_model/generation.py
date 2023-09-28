@@ -72,26 +72,32 @@ class LLaMA:
         - batch_size (int): The number of samples in the batch.
         """
 
+        torch.manual_seed(0)
+
+        follow = 1
+
         # Generate random integers between 1 and 32000
-        ctx_tokens = torch.randint(1, 32001, (batch_size // 4, ctx_len)).cuda().long()
+        ctx_tokens = (
+            torch.randint(1, 32001, (batch_size // follow, ctx_len)).cuda().long()
+        )
         follow_tokens = torch.randint(1, 32001, (batch_size, follow_len)).cuda().long()
 
         prev_pos = 0
 
         # for _ in range(2):
-        self.model.forward(ctx_tokens, (0, 1))
-        self.model.forward(follow_tokens, (ctx_len, 1))
+        self.model.forward(ctx_tokens, (0, 1, follow))
+        self.model.forward(follow_tokens, (ctx_len, 1, follow))
 
         for _ in range(2):
             torch.cuda.synchronize()
             torch.cuda.nvtx.range_push("forward")
 
             torch.cuda.nvtx.range_push("ctx")
-            self.model.forward(ctx_tokens, (0, 1))
+            self.model.forward(ctx_tokens, (0, 1, follow))
             torch.cuda.nvtx.range_pop()
 
             torch.cuda.nvtx.range_push("follow")
-            result = self.model.forward(ctx_tokens, (ctx_len, 1))
+            result = self.model.forward(follow_tokens, (ctx_len, 1, follow))
             torch.cuda.nvtx.range_pop()
 
             torch.cuda.nvtx.range_pop()

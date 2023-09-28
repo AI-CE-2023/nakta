@@ -87,6 +87,8 @@ class LLama_ACC(BaseLM):
 
         self._device = local_rank
 
+        self.model_name = "llama"
+
         self.model, self.tokenizer = load(
             ckpt_dir,
             tokenizer_path,

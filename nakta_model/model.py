@@ -88,9 +88,9 @@ class Attention(nn.Module):
             self.xv_cache[cache_info[1]] = xv
         else:
             # Load the cached values and expand them along the batch dimension
-            xq_cached = self.xq_cache[cache_info[1]].repeat(4, 1, 1, 1)
-            xk_cached = self.xk_cache[cache_info[1]].repeat(4, 1, 1, 1)
-            xv_cached = self.xv_cache[cache_info[1]].repeat(4, 1, 1, 1)
+            xq_cached = self.xq_cache[cache_info[1]].repeat(cache_info[2], 1, 1, 1)
+            xk_cached = self.xk_cache[cache_info[1]].repeat(cache_info[2], 1, 1, 1)
+            xv_cached = self.xv_cache[cache_info[1]].repeat(cache_info[2], 1, 1, 1)
 
             # Compute the new rotary embeddings for xq and xk
             xq_new, xk_new = self.rotary_emb(xqk, seqlen_offset=cache_info[0])
@@ -100,6 +100,7 @@ class Attention(nn.Module):
             xq = torch.cat((xq_cached, xq_new), dim=1)
             xk = torch.cat((xk_cached, xk_new), dim=1)
             xv = torch.cat((xv_cached, xv), dim=1)
+
             # print(xq.shape)
 
         # xq, xk = self.rotary_emb(xqk, seqlen_offset=)
@@ -186,7 +187,7 @@ class TransformerBlock(nn.Module):
     ):
         if cache_info[0] != 0 and self.layer_id == 59:
             x_concat = torch.cat(
-                (self.cached_x[cache_info[1]].repeat(4, 1, 1), x), dim=1
+                (self.cached_x[cache_info[1]].repeat(cache_info[2], 1, 1), x), dim=1
             )
             h = x_concat + self.attention.forward(
                 self.attention_norm(x), cache_info, self.layer_id
@@ -230,12 +231,12 @@ class Transformer(nn.Module):
     @torch.inference_mode()
     def forward(self, tokens: torch.Tensor, cache_info):
         """
-        cache_info: Tuple(seqlen_offset: int, cache_key: int)
+        cache_info: Tuple(seqlen_offset: int, cache_key: int, follow_num: int)
         """
         with torch.backends.cuda.sdp_kernel(
-            enable_flash=True,
+            enable_flash=False,
             enable_math=False,
-            enable_mem_efficient=False,
+            enable_mem_efficient=True,
         ):
             _bsz, seqlen = tokens.shape
             h = self.tok_embeddings(tokens)

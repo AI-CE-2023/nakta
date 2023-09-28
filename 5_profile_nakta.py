@@ -85,12 +85,12 @@ def main(
     )
 
     results = generator.prof(ctx_len, follow_len, seq_num)
-    torch.save(results, "./nakta.pt")
+    # torch.save(results, "./nakta.pt")
 
 
 if __name__ == "__main__":
     fire.Fire(main)
 
 """
-CUDA_LAUNCH_BLOCKING=1 nsys profile -w true -t cuda,nvtx,osrt,cudnn,cublas --force-overwrite true -o ./model_profile/nakta_3090_cache.nsys-rep torchrun --nproc_per_node 4 5_profile_nakta.py --ckpt_dir ./weights/modified/30B_2 --tokenizer_path ./weights/original/tokenizer.model  --max_batch_size 128
+CUDA_LAUNCH_BLOCKING=1 nsys profile -w true -t cuda,nvtx,osrt,cudnn,cublas --force-overwrite true -o ./model_profile/nakta_cache.nsys-rep torchrun --nproc_per_node 4 5_profile_nakta.py --ckpt_dir ./weights/modified/30B_2 --tokenizer_path ./weights/original/tokenizer.model  --max_batch_size 1
 """

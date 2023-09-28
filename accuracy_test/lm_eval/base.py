@@ -349,11 +349,6 @@ class BaseLM(LM):
             inplens = []
 
             padding_length = None
-
-            # because vectorizing is annoying, we first convert each (context, continuation) pair to padded
-            # tensors, then we pack them together into a batch, call the model, and then pick it all apart
-            # again because vectorizing is annoying
-
             for _, context_enc, continuation_enc in chunk:
                 # sanity check
                 assert len(context_enc) > 0
@@ -405,10 +400,31 @@ class BaseLM(LM):
                 cont_toks_list.append(cont)
                 inplens.append(inplen)
 
-            batched_inps = torch.cat(inps, dim=0)  # [batch, padding_length]
-            multi_logits = F.log_softmax(
-                self._model_call(batched_inps), dim=-1
-            ).cpu()  # [batch, padding_length, vocab]
+            if self.model_name == "nakta":
+                # ctx_len = len(chunk[0][1])
+                # ctx_inps = torch.tensor(
+                #     chunk[0][1], dtype=torch.long, device="cuda"
+                # ).unsqueeze(0)
+
+                # follow_inps = torch.tensor(
+                #     chunk[0][2], dtype=torch.long, device="cuda"
+                # ).unsqueeze(0)
+                batched_inps = torch.cat(inps, dim=0)  # [batch, padding_length]
+
+                self._model_call(batched_inps[:, : len(context_enc)], (0, 0, 1))
+
+                multi_logits = F.log_softmax(
+                    self._model_call(
+                        batched_inps[:, len(context_enc) :], (len(context_enc), 0, 1)
+                    ),
+                    dim=-1,
+                ).cpu()  # [batch, padding_length, vocab]
+
+            else:
+                batched_inps = torch.cat(inps, dim=0)  # [batch, padding_length]
+                multi_logits = F.log_softmax(
+                    self._model_call(batched_inps), dim=-1
+                ).cpu()  # [batch, padding_length, vocab]
 
             ## with torch.no_grad(): return self.model(inps)[0]
 
