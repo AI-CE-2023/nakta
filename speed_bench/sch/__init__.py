@@ -1,1 +1,1 @@
-from .sch3 import SpeedDataset
+from .sch_llama import SpeedDataset

@@ -10,11 +10,11 @@ import fire
 import numpy as np
 import torch
 from fairscale.nn.model_parallel.initialize import initialize_model_parallel
-from sch.sch3 import SpeedDataset, collate_fn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from llama_org import LLaMA, ModelArgs, Tokenizer, Transformer
+from speed_bench.sch.sch_llama import SpeedDataset, collate_fn
 
 
 def setup_model_parallel() -> Tuple[int, int]:
@@ -35,8 +35,6 @@ def load(
     tokenizer_path: str,
     local_rank: int,
     world_size: int,
-    max_seq_len: int,
-    max_batch_size: int,
 ) -> LLaMA:
     start_time = time.time()
     checkpoints = sorted(Path(ckpt_dir).glob("*.pth"))
@@ -49,9 +47,7 @@ def load(
     with open(Path(ckpt_dir) / "params.json", "r") as f:
         params = json.loads(f.read())
 
-    model_args: ModelArgs = ModelArgs(
-        max_seq_len=max_seq_len, max_batch_size=max_batch_size, **params
-    )
+    model_args: ModelArgs = ModelArgs(**params)
     tokenizer = Tokenizer(model_path=tokenizer_path)
     model_args.vocab_size = tokenizer.n_words
     torch.set_default_tensor_type(torch.cuda.HalfTensor)
@@ -67,21 +63,12 @@ def load(
 def main(
     ckpt_dir: str,
     tokenizer_path: str,
-    temperature: float = 0.0,
-    top_p: float = 1.0,
-    max_seq_len: int = 512,
-    max_batch_size: int = 32,
 ):
     local_rank, world_size = setup_model_parallel()
     if local_rank > 0:
         sys.stdout = open(os.devnull, "w")
 
-    generator = load(
-        ckpt_dir, tokenizer_path, local_rank, world_size, max_seq_len, max_batch_size
-    )
-
-    # with open("../dataset/validation_data_v1.pickle", "rb") as fr:
-    #     validset = pickle.load(fr)["train"].tolist()
+    generator = load(ckpt_dir, tokenizer_path, local_rank, world_size)
 
     with open("./test.pickle", "rb") as fr:
         validset = pickle.load(fr)

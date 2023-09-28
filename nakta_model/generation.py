@@ -74,7 +74,9 @@ class LLaMA:
 
         torch.manual_seed(0)
 
-        follow = 1
+        follow = 4
+
+        assert batch_size % follow == 0
 
         # Generate random integers between 1 and 32000
         ctx_tokens = (

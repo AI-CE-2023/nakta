@@ -32,8 +32,6 @@ def load(
     tokenizer_path: str,
     local_rank: int,
     world_size: int,
-    max_seq_len: int,
-    max_batch_size: int,
 ) -> LLaMA:
     start_time = time.time()
     checkpoints = sorted(Path(ckpt_dir).glob("*.pth"))
@@ -46,9 +44,7 @@ def load(
     with open(Path(ckpt_dir) / "params.json", "r") as f:
         params = json.loads(f.read())
 
-    model_args: ModelArgs = ModelArgs(
-        max_seq_len=max_seq_len, max_batch_size=max_batch_size, **params
-    )
+    model_args: ModelArgs = ModelArgs(**params)
     tokenizer = Tokenizer(model_path=tokenizer_path)
     model_args.vocab_size = tokenizer.n_words
     torch.set_default_tensor_type(torch.cuda.HalfTensor)
@@ -64,12 +60,11 @@ def load(
 def main(
     ckpt_dir: str,
     tokenizer_path: str,
-    max_seq_len: int = 512,
-    max_batch_size: int = 32,
     ctx_len: int = 60,
     follow_len: int = 40,
+    batch_size: int = 128,
 ):
-    seq_num = max_batch_size
+    seq_num = batch_size
 
     local_rank, world_size = setup_model_parallel()
     if local_rank > 0:
@@ -80,8 +75,6 @@ def main(
         tokenizer_path,
         local_rank,
         world_size,
-        max_seq_len,
-        max_batch_size,
     )
 
     results = generator.prof(ctx_len, follow_len, seq_num)
@@ -92,5 +85,5 @@ if __name__ == "__main__":
     fire.Fire(main)
 
 """
-CUDA_LAUNCH_BLOCKING=1 nsys profile -w true -t cuda,nvtx,osrt,cudnn,cublas --force-overwrite true -o ./model_profile/nakta_cache.nsys-rep torchrun --nproc_per_node 4 5_profile_nakta.py --ckpt_dir ./weights/modified/30B_2 --tokenizer_path ./weights/original/tokenizer.model  --max_batch_size 1
+CUDA_LAUNCH_BLOCKING=1 nsys profile -w true -t cuda,nvtx,osrt,cudnn,cublas --force-overwrite true -o ./model_profile/nakta_cache.nsys-rep torchrun --nproc_per_node 4 5_profile_nakta.py --ckpt_dir ./weights/modified/30B_2 --tokenizer_path ./weights/original/tokenizer.model
 """
