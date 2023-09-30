@@ -29,8 +29,6 @@ class ModelArgs:
     norm_eps: float = 1e-5
 
 
-
-
 class Attention(nn.Module):
     def __init__(self, args: ModelArgs):
         super().__init__()
@@ -76,11 +74,12 @@ class Attention(nn.Module):
         xqk = self.wqk(x)
         xv = self.wv(x)
 
-        # xq = xq.view(bsz, seqlen, self.n_local_heads, self.head_dim)
-        # xk = xk.view(bsz, seqlen, self.n_local_heads, self.head_dim)
         xqk = xqk.view(bsz, seqlen, 2, self.n_local_heads, self.head_dim)
         xv = xv.view(bsz, seqlen, self.n_local_heads, self.head_dim)
-        if cache_info[0] == 0:
+
+        if cache_info[1] == -1:
+            xq, xk = self.rotary_emb(xqk, seqlen_offset=0)
+        elif cache_info[0] == 0:
             xq, xk = self.rotary_emb(xqk, seqlen_offset=0)
             self.xq_cache[cache_info[1]] = xq
             self.xk_cache[cache_info[1]] = xk
@@ -93,30 +92,23 @@ class Attention(nn.Module):
 
             # Compute the new rotary embeddings for xq and xk
             xq_new, xk_new = self.rotary_emb(xqk, seqlen_offset=cache_info[0])
-            # print(xq_cached.shape)
-            # print(xq_new.shape)
+
             # Concatenate the cached values with the new values
             xq = torch.cat((xq_cached, xq_new), dim=1)
             xk = torch.cat((xk_cached, xk_new), dim=1)
             xv = torch.cat((xv_cached, xv), dim=1)
 
-            # print(xq.shape)
-
-        # xq, xk = self.rotary_emb(xqk, seqlen_offset=)
         xq = xq.transpose(1, 2).contiguous()
         keys = xk.transpose(1, 2).contiguous()
         values = xv.transpose(1, 2).contiguous()
 
         output = scaled_dot_product_attention(xq, keys, values, is_causal=True)
-        # if cache_info[0] != 0:
-        #     print(output.shape)
+
         output = (
             output.transpose(1, 2).contiguous().view(bsz, seqlen + cache_info[0], -1)
         )
-        if layer_id != 59:
+        if layer_id != 59 and cache_info[1] != -1:
             output = output[:, cache_info[0] :, :]
-        # if cache_info[0] != 0:
-        #     print(output.shape)
 
         return self.wo(output)
 
@@ -184,18 +176,23 @@ class TransformerBlock(nn.Module):
         cache_info,
         # mask: Optional[torch.Tensor],
     ):
-        if cache_info[0] != 0 and self.layer_id == 59:
-            x_concat = torch.cat(
-                (self.cached_x[cache_info[1]].repeat(cache_info[2], 1, 1), x), dim=1
-            )
-            h = x_concat + self.attention.forward(
-                self.attention_norm(x), cache_info, self.layer_id
-            )
-        elif cache_info[0] == 0 and self.layer_id == 59:
-            self.cached_x[cache_info[1]] = x
+        if cache_info[1] == -1:
             h = x + self.attention.forward(
                 self.attention_norm(x), cache_info, self.layer_id
             )
+        elif self.layer_id == 59:
+            if cache_info[0] != 0:
+                x_concat = torch.cat(
+                    (self.cached_x[cache_info[1]].repeat(cache_info[2], 1, 1), x), dim=1
+                )
+                h = x_concat + self.attention.forward(
+                    self.attention_norm(x), cache_info, self.layer_id
+                )
+            else:
+                self.cached_x[cache_info[1]] = x
+                h = x + self.attention.forward(
+                    self.attention_norm(x), cache_info, self.layer_id
+                )
         else:
             h = x + self.attention.forward(
                 self.attention_norm(x), cache_info, self.layer_id
@@ -231,6 +228,7 @@ class Transformer(nn.Module):
     def forward(self, tokens: torch.Tensor, cache_info):
         """
         cache_info: Tuple(seqlen_offset: int, cache_key: int, follow_num: int)
+        if cache_key == -1: -> Non Cache Mode
         """
         with torch.backends.cuda.sdp_kernel(
             enable_flash=False,

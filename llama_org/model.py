@@ -18,6 +18,41 @@ from torch import nn
 from .nvtx_annotation import nvtx_annotate, nvtx_annotate_function
 
 
+@dataclass
+class ModelArgs:
+    dim: int = 512
+    n_layers: int = 8
+    n_heads: int = 8
+    vocab_size: int = -1  # defined later by tokenizer
+    multiple_of: int = 256  # make SwiGLU hidden layer size multiple of large power of 2
+    norm_eps: float = 1e-5
+
+    max_batch_size: int = 128
+    max_seq_len: int = 160
+
+
+class RMSNorm(torch.nn.Module):
+    def __init__(self, dim: int, eps: float = 1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))
+
+    def _norm(self, x):
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+
+    def forward(self, x):
+        output = self._norm(x.float()).type_as(x)
+        return output * self.weight
+
+
+def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0):
+    freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+    t = torch.arange(end, device=freqs.device)  # type: ignore
+    freqs = torch.outer(t, freqs).float()  # type: ignore
+    freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
+    return freqs_cis
+
+
 def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
     ndim = x.ndim
     assert 0 <= 1 < ndim
@@ -39,55 +74,16 @@ def apply_rotary_emb(
     return xq_out.type_as(xq), xk_out.type_as(xk)
 
 
-def attention_native(xq, xk, xv, bsz, seqlen, head_dim, mask: None):
-    xq = xq.transpose(1, 2)
-    keys = xk.transpose(1, 2)
-    values = xv.transpose(1, 2)
+def attention_native(xq, keys, values, head_dim, mask):
     scores = torch.matmul(xq, keys.transpose(2, 3)) / math.sqrt(head_dim)
     if mask is not None:
         scores = scores + mask  # (bs, n_local_heads, slen, cache_len + slen)
     scores = F.softmax(scores.float(), dim=-1).type_as(xq)
-    output = torch.matmul(scores, values)  # (bs, n_local_heads, slen, head_dim)
-    output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
-    return output
+    return torch.matmul(scores, values)  # (bs, n_local_heads, slen, head_dim)
 
 
 def SwiGLU(x_1, x_2):
     return F.silu(x_1) * x_2
-
-
-def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0):
-    freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
-    t = torch.arange(end, device=freqs.device)  # type: ignore
-    freqs = torch.outer(t, freqs).float()  # type: ignore
-    freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
-    return freqs_cis
-
-
-@dataclass
-class ModelArgs:
-    dim: int = 512
-    n_layers: int = 8
-    n_heads: int = 8
-    vocab_size: int = -1  # defined later by tokenizer
-    multiple_of: int = 256  # make SwiGLU hidden layer size multiple of large power of 2
-    norm_eps: float = 1e-5
-
-    max_seq_len: int = 2048
-
-
-class RMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))
-
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-    def forward(self, x):
-        output = self._norm(x.float()).type_as(x)
-        return output * self.weight
 
 
 class Attention(nn.Module):
@@ -126,12 +122,12 @@ class Attention(nn.Module):
             init_method=lambda x: x,
         )
 
-        # self.cache_k = torch.zeros(
-        #     (args.max_batch_size, args.max_seq_len, self.n_local_heads, self.head_dim)
-        # ).cuda()
-        # self.cache_v = torch.zeros(
-        #     (args.max_batch_size, args.max_seq_len, self.n_local_heads, self.head_dim)
-        # ).cuda()
+        self.cache_k = torch.zeros(
+            (args.max_batch_size, args.max_seq_len, self.n_local_heads, self.head_dim)
+        ).cuda()
+        self.cache_v = torch.zeros(
+            (args.max_batch_size, args.max_seq_len, self.n_local_heads, self.head_dim)
+        ).cuda()
 
     def forward(
         self,
@@ -149,16 +145,21 @@ class Attention(nn.Module):
 
         xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
-        # self.cache_k = self.cache_k.to(xq)
-        # self.cache_v = self.cache_v.to(xq)
+        self.cache_k = self.cache_k.to(xq)
+        self.cache_v = self.cache_v.to(xq)
 
-        # self.cache_k[:bsz, start_pos : start_pos + seqlen] = xk
-        # self.cache_v[:bsz, start_pos : start_pos + seqlen] = xv
+        self.cache_k[:bsz, start_pos : start_pos + seqlen] = xk
+        self.cache_v[:bsz, start_pos : start_pos + seqlen] = xv
 
-        # keys = self.cache_k[:bsz, : start_pos + seqlen]
-        # values = self.cache_v[:bsz, : start_pos + seqlen]
+        keys = self.cache_k[:bsz, : start_pos + seqlen]
+        values = self.cache_v[:bsz, : start_pos + seqlen]
 
-        output = attention_native(xq, xk, xv, bsz, seqlen, self.head_dim, mask)
+        xq = xq.transpose(1, 2)
+        keys = keys.transpose(1, 2)
+        values = values.transpose(1, 2)
+
+        output = attention_native(xq, keys, values, self.head_dim, mask)
+        output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
 
         return self.wo(output)
 
@@ -254,12 +255,10 @@ class Transformer(nn.Module):
             )
             mask = torch.triu(mask, diagonal=start_pos + 1).type_as(h)
 
-        for i, layer in enumerate(self.layers):
-            torch.cuda.nvtx.range_push(f"transformer_{i:02d}")
+        for layer in self.layers:
             h = layer(h, start_pos, freqs_cis, mask)
-            torch.cuda.nvtx.range_pop()
         h = self.norm(h)
-        output = self.output(h)
+        output = self.output(h)  # only compute last logits
         return output.float()
 
 
@@ -280,4 +279,4 @@ if os.getenv("CUDA_LAUNCH_BLOCKING"):
     apply_rotary_emb = nvtx_annotate_function(apply_rotary_emb)
     attention_native = nvtx_annotate_function(attention_native)
     SwiGLU = nvtx_annotate_function(SwiGLU)
-    precompute_freqs_cis = nvtx_annotate_function(precompute_freqs_cis)
+# precompute_freqs_cis = nvtx_annotate_function(precompute_freqs_cis)

@@ -27,11 +27,11 @@ class SpeedDataset(Dataset):
         self.default_batch_size = default_batch_size
         self.batch_scheduler = batch_scheduler
         self.tokenizer = Tokenizer(model_path=tokenizer_path)
-        self.tokenized_strings = self._tokenize_strings(self.strings)
+        self.tokenized_strings = self._concat_strings(self.strings)
 
         self.batches = self._create_dataset()
 
-    def _tokenize_strings(self, strings: List[str]) -> List[List[int]]:
+    def _concat_strings(self, strings: List[str]) -> List[List[int]]:
         return [s[1] + s[2] for s in strings]
 
     def _create_dataset(self):
@@ -124,28 +124,30 @@ if __name__ == "__main__":
         strings,
         tokenizer_path="../../weights/original/tokenizer.model",
         order="ascending",
-        default_batch_size=1,
+        default_batch_size=120,
         # batch_scheduler=length_based_batch_scheduler,
     )
 
+    print(speed_dataset_torch.batches[1].shape)
+    print(len(speed_dataset_torch.batches))
     # Using DataLoader to load the dataset
     dataloader = DataLoader(
-        speed_dataset_torch, batch_size=1, shuffle=True, collate_fn=collate_fn
+        speed_dataset_torch, batch_size=1, shuffle=False, collate_fn=collate_fn
     )
 
     # Gathering statistics
     df = speed_dataset_torch.gather_statistics()
-    print(df)
+    # print(df)
 
-    # Plotting the statistics
-    plt.figure(figsize=(10, 6))
-    plt.plot(df["tokenized_length"], df["batch_size"], marker="o", linestyle="-")
-    plt.xlabel("Average Tokenized Length")
-    plt.ylabel("Batch Size")
-    plt.title("Batch Size vs. Average Tokenized Length")
-    plt.grid(True)
-    plt.savefig("./scheduled_info.png")
+    # # Plotting the statistics
+    # plt.figure(figsize=(10, 6))
+    # plt.plot(df["tokenized_length"], df["batch_size"], marker="o", linestyle="-")
+    # plt.xlabel("Average Tokenized Length")
+    # plt.ylabel("Batch Size")
+    # plt.title("Batch Size vs. Average Tokenized Length")
+    # plt.grid(True)
+    # plt.savefig("./scheduled_info.png")
 
-    # Print shape of the first batch
-    first_batch = next(iter(dataloader))
-    print(first_batch.shape)
+    # # Print shape of the first batch
+    # first_batch = next(iter(dataloader))
+    # print(first_batch.shape)

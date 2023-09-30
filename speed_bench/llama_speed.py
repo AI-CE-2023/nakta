@@ -10,11 +10,11 @@ import fire
 import numpy as np
 import torch
 from fairscale.nn.model_parallel.initialize import initialize_model_parallel
+from sch.sch_llama import SpeedDataset, collate_fn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from llama_org import LLaMA, ModelArgs, Tokenizer, Transformer
-from speed_bench.sch.sch_llama import SpeedDataset, collate_fn
 
 
 def setup_model_parallel() -> Tuple[int, int]:
@@ -73,11 +73,13 @@ def main(
     with open("./test.pickle", "rb") as fr:
         validset = pickle.load(fr)
 
+    default_batch_size = 1
+
     valid_datas = SpeedDataset(
         validset,
         tokenizer_path=tokenizer_path,
         order="descending",
-        default_batch_size=60,
+        default_batch_size=default_batch_size,
         device=f"cuda:{local_rank}",
     )
 
@@ -93,8 +95,19 @@ def main(
         generator.bench(batch)
     end_event.record()
     torch.cuda.synchronize()
+    total_time = start_event.elapsed_time(end_event) / 1000
+    print(total_time)
 
-    print(start_event.elapsed_time(end_event) / 1000)
+    model_name = "llama"
+
+    # 결과를 JSON 파일에 저장
+    result = {
+        "model_name": model_name,
+        "execution_time": total_time,
+    }
+
+    with open(f"{model_name}_speed_test_{default_batch_size}.json", "w") as json_file:
+        json.dump(result, json_file, indent=4)
 
 
 if __name__ == "__main__":

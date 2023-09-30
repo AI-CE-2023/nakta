@@ -88,7 +88,7 @@ class LLaMA:
 
         ctx_tokens = ctx_tokens.repeat(follow, 1)
 
-        tokens = torch.cat((ctx_tokens, follow_tokens), dim=1)
+        tokens = torch.cat((ctx_tokens, follow_tokens), dim=1).contiguous()
 
         prev_pos = 0
 

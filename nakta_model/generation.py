@@ -63,7 +63,7 @@ class LLaMA:
             decoded.append(self.tokenizer.decode(t))
         return decoded
 
-    def prof(self, ctx_len: int, follow_len: int, batch_size: int):
+    def prof(self, ctx_len: int, follow_len: int, batch_size: int, cached: bool):
         """
         Profiles the forward pass of a model using given seq_len and batch_size.
 
@@ -84,58 +84,98 @@ class LLaMA:
         )
         follow_tokens = torch.randint(1, 32001, (batch_size, follow_len)).cuda().long()
 
-        prev_pos = 0
+        if cached:
+            for _ in range(2):
+                self.model.forward(ctx_tokens, (0, 1, follow))
+                self.model.forward(follow_tokens, (ctx_len, 1, follow))
 
-        # for _ in range(2):
-        self.model.forward(ctx_tokens, (0, 1, follow))
-        self.model.forward(follow_tokens, (ctx_len, 1, follow))
+            for _ in range(2):
+                torch.cuda.synchronize()
+                torch.cuda.nvtx.range_push("forward")
 
-        for _ in range(2):
-            torch.cuda.synchronize()
-            torch.cuda.nvtx.range_push("forward")
+                torch.cuda.nvtx.range_push("ctx")
+                self.model.forward(ctx_tokens, (0, 1, follow))
+                torch.cuda.nvtx.range_pop()
 
-            torch.cuda.nvtx.range_push("ctx")
-            self.model.forward(ctx_tokens, (0, 1, follow))
-            torch.cuda.nvtx.range_pop()
+                torch.cuda.nvtx.range_push("follow")
+                result = self.model.forward(follow_tokens, (ctx_len, 1, follow))
+                torch.cuda.nvtx.range_pop()
 
-            torch.cuda.nvtx.range_push("follow")
-            result = self.model.forward(follow_tokens, (ctx_len, 1, follow))
-            torch.cuda.nvtx.range_pop()
+                torch.cuda.nvtx.range_pop()
+                torch.cuda.synchronize()
+        else:
+            ctx_tokens = ctx_tokens.repeat(follow, 1)
+            tokens = torch.cat((ctx_tokens, follow_tokens), dim=1)
 
-            torch.cuda.nvtx.range_pop()
-            torch.cuda.synchronize()
+            cached_info = (0, -1, follow)
+            assert cached_info[1] == -1
+
+            for _ in range(2):
+                self.model.forward(tokens, cached_info)
+
+            for _ in range(2):
+                torch.cuda.synchronize()
+                torch.cuda.nvtx.range_push("forward")
+                result = self.model.forward(tokens, cached_info)
+                torch.cuda.nvtx.range_pop()
+                torch.cuda.synchronize()
 
         return result
 
-    def accuracy(
-        self,
-        prompts: List[str],
-    ):
-        bsz = len(prompts)
+    def bench(self, batch):
+        self.model.forward(batch[0], (0, 1, 4))
+        self.model.forward(batch[1], (batch[2], 1, 4))
 
-        prompt_tokens = [self.tokenizer.encode(x, bos=True, eos=True) for x in prompts]
+    def speed_test(self, ctx_len: int, follow_len: int, batch_size: int):
+        torch.manual_seed(0)
 
-        max_prompt_size = max([len(t) for t in prompt_tokens])
+        follow = 4
+        num_iters = 5
 
-        tokens = torch.full((bsz, max_prompt_size), self.tokenizer.pad_id).cuda().long()
-        for k, t in enumerate(prompt_tokens):
-            tokens[k, : len(t)] = torch.tensor(t).long()
-        input_text_mask = tokens != self.tokenizer.pad_id
-        prev_pos = 0
+        assert batch_size % follow == 0
+
+        # Generate random integers between 1 and 32000
+        ctx_tokens = (
+            torch.randint(1, 32001, (batch_size // follow, ctx_len)).cuda().long()
+        )
+        follow_tokens = torch.randint(1, 32001, (batch_size, follow_len)).cuda().long()
+
+        cached_times = []
 
         start_event = torch.cuda.Event(enable_timing=True)
         end_event = torch.cuda.Event(enable_timing=True)
 
-        torch.cuda.synchronize()
-        start_event.record()
-        logits = self.model.forward(tokens[:, :], prev_pos)
-        end_event.record()
-        torch.cuda.synchronize()
+        for _ in range(num_iters):
+            torch.cuda.synchronize()
+            start_event.record()
 
-        return logits, start_event.elapsed_time(end_event) / 1000
+            self.model.forward(ctx_tokens, (0, 1, follow))
+            result = self.model.forward(follow_tokens, (ctx_len, 1, follow))
 
-    def bench(self, tokens):
-        self.model.forward(tokens[:, :], 0)
+            end_event.record()
+            torch.cuda.synchronize()
+
+            cached_times.append(start_event.elapsed_time(end_event) / 1000)
+
+        ctx_tokens = ctx_tokens.repeat(follow, 1)
+        tokens = torch.cat((ctx_tokens, follow_tokens), dim=1)
+
+        n_cached_times = []
+        for _ in range(num_iters):
+            torch.cuda.synchronize()
+            start_event.record()
+
+            self.model.forward(tokens, (0, -1, follow))
+
+            end_event.record()
+            torch.cuda.synchronize()
+
+            n_cached_times.append(start_event.elapsed_time(end_event) / 1000)
+
+        return (
+            batch_size / (sum(cached_times) / len(cached_times)),
+            batch_size / (sum(n_cached_times) / len(cached_times)),
+        )
 
 
 def sample_top_p(probs, p):

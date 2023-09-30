@@ -62,10 +62,8 @@ def main(
     tokenizer_path: str,
     ctx_len: int = 60,
     follow_len: int = 40,
-    batch_size: int = 128,
+    batch_size: int = 64,
 ):
-    seq_num = batch_size
-
     local_rank, world_size = setup_model_parallel()
     if local_rank > 0:
         sys.stdout = open(os.devnull, "w")
@@ -77,8 +75,8 @@ def main(
         world_size,
     )
 
-    results = generator.prof(ctx_len, follow_len, seq_num)
-    # torch.save(results, "./original.pt")
+    results = generator.prof(ctx_len, follow_len, batch_size)
+    torch.save(results, "./original.pt")
 
 
 if __name__ == "__main__":
