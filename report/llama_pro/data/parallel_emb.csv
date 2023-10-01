@@ -1,0 +1,8 @@
+Name,Duration
+indexSelectLargeIndex,198.298 μs
+ncclKernel_AllGather_RING_LL_Sum_int8_t,922.950 μs
+cudaMemcpyAsync,81.561 μs
+cudaMemcpyAsync,72.628 μs
+cudaMemcpyAsync,72.043 μs
+cudaMemcpyAsync,71.248 μs
+CatArrayBatchedCopy,289.021 μs

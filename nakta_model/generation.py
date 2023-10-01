@@ -122,9 +122,12 @@ class LLaMA:
 
         return result
 
-    def bench(self, batch):
-        self.model.forward(batch[0], (0, 1, 4))
-        self.model.forward(batch[1], (batch[2], 1, 4))
+    def bench(self, batch, cache: bool):
+        if cache:
+            self.model.forward(batch[0], (0, 1, 4))
+            self.model.forward(batch[1], (batch[2], 1, 4))
+        else:
+            self.model.forward(batch, (0, -1, 4))
 
     def speed_test(self, ctx_len: int, follow_len: int, batch_size: int):
         torch.manual_seed(0)

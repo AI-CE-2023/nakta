@@ -411,12 +411,17 @@ class BaseLM(LM):
                 # ).unsqueeze(0)
                 batched_inps = torch.cat(inps, dim=0)  # [batch, padding_length]
 
-                self._model_call(batched_inps[:, : len(context_enc)], (0, 0, 1))
+                # self._model_call(batched_inps[:, : len(context_enc)], (0, 0, 1))
+
+                # multi_logits = F.log_softmax(
+                #     self._model_call(
+                #         batched_inps[:, len(context_enc) :], (len(context_enc), 0, 1)
+                #     ),
+                #     dim=-1,
+                # ).cpu()  # [batch, padding_length, vocab]
 
                 multi_logits = F.log_softmax(
-                    self._model_call(
-                        batched_inps[:, len(context_enc) :], (len(context_enc), 0, 1)
-                    ),
+                    self._model_call(batched_inps, (0, -1, 1)),
                     dim=-1,
                 ).cpu()  # [batch, padding_length, vocab]
 

@@ -80,9 +80,20 @@ class SpeedDataset(Dataset):
         ctx = [b[0] for b in batch]
         min_ctx = min([len(c) for c in ctx])
         followings = [f for b in batch for f in b[1]]
+        assert len(ctx) * 4 == len(followings)
 
+        group_size = 4
+        new_followings = []
+        for i, f in enumerate(followings):
+            current_ctx = ctx[i // group_size]
+            new_following = current_ctx[min_ctx:] + f
+            new_followings.append(new_following)
+
+        num_groups = len(new_followings) // group_size
         new_followings = [
-            ctx[i // len(batch)][min_ctx:] + f for i, f in enumerate(followings)
+            new_followings[i + j * group_size]
+            for j in range(num_groups)
+            for i in range(group_size)
         ]
         new_ctx = [c[:min_ctx] for c in ctx]
 
@@ -193,13 +204,13 @@ if __name__ == "__main__":
     # Test
     with open("../test.pickle", "rb") as fr:
         strings = pickle.load(fr)
-
+    default_batch_size = 4
     # Create the SpeedDatasetTorch object
     speed_dataset_torch = SpeedDataset(
         strings,
         tokenizer_path="../../weights/original/tokenizer.model",
         order="ascending",
-        default_batch_size=30,
+        default_batch_size=4,
         # batch_scheduler=length_based_batch_scheduler,
     )
     check_num = 1

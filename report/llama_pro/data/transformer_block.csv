@@ -1,0 +1,12 @@
+Name,Duration
+RMSNorm,2.345 ms
+ColumnParallelLinear,1.861 ms
+ColumnParallelLinear,1.836 ms
+ColumnParallelLinear,1.843 ms
+apply_rotary_emb,843.092 μs
+attention_native,1.287 ms
+RowParallelLinear,4.183 ms
+ColumnParallelLinear,4.328 ms
+ColumnParallelLinear,4.332 ms
+SwiGLU,424.142 μs
+RowParallelLinear,5.777 ms

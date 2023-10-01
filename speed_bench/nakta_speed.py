@@ -73,7 +73,9 @@ def main(
     with open("./test.pickle", "rb") as fr:
         validset = pickle.load(fr)
 
-    default_batch_size = 15
+    default_batch_size = 16
+
+    cache = True
 
     valid_datas = SpeedDataset(
         validset,
@@ -87,12 +89,17 @@ def main(
         valid_datas, batch_size=1, shuffle=True, collate_fn=collate_fn
     )
 
+    first_batch = next(iter(dataloader))
+
+    for _ in range(2):
+        generator.bench(first_batch, cache=cache)
+
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
     torch.cuda.synchronize()
     start_event.record()
     for batch in tqdm(dataloader):
-        generator.bench(batch)
+        generator.bench(batch, cache=cache)
     end_event.record()
     torch.cuda.synchronize()
 
@@ -101,14 +108,18 @@ def main(
 
     model_name = "nakta"
 
-    # 결과를 JSON 파일에 저장
-    result = {
-        "model_name": model_name,
-        "execution_time": total_time,
-    }
+    if local_rank == 0:
+        # 결과를 JSON 파일에 저장
+        result = {
+            "model_name": model_name,
+            "execution_time": total_time,
+            "cache": cache,
+        }
 
-    with open(f"{model_name}_speed_test_{default_batch_size*4}.json", "w") as json_file:
-        json.dump(result, json_file, indent=4)
+        with open(
+            f"./results/{model_name}_speed_test_{default_batch_size*4}.json", "w"
+        ) as json_file:
+            json.dump(result, json_file, indent=4)
 
 
 if __name__ == "__main__":

@@ -28,6 +28,9 @@ class ModelArgs:
     multiple_of: int = 256  # make SwiGLU hidden layer size multiple of large power of 2
     norm_eps: float = 1e-5
 
+    max_seq_len: int = 512
+    max_batch_size: int = 512
+
 
 class Attention(nn.Module):
     def __init__(self, args: ModelArgs):
@@ -59,7 +62,7 @@ class Attention(nn.Module):
             init_method=lambda x: x,
         )
         self.rotary_emb = RotaryEmbedding(
-            dim=self.head_dim, max_seq_len=512, interleaved=True
+            dim=self.head_dim, max_seq_len=args.max_seq_len, interleaved=True
         )
 
         self.split_val = args.n_heads * self.head_dim

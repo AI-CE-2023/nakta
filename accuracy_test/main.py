@@ -15,8 +15,8 @@ class ModelArgs:
     tokenizer_path: str
     local_rank: int = 0
     world_size: int = 1
-    max_seq_len: int = 512
-    max_batch_size: int = 128
+    max_seq_len: int = 256
+    max_batch_size: int = 2
     batch_size: int = 1
 
     def asdict(self):

@@ -39,12 +39,10 @@ class SpeedDataset(Dataset):
             self.tokenized_strings.sort(key=len)
         elif self.order == "descending":
             self.tokenized_strings.sort(key=len, reverse=True)
-        # elif self.order == "random":
-        #     self.tokenized_strings = sorted(
-        #         self.tokenized_strings, key=lambda x: random.random()
-        #     )
+        elif self.order == "None":
+            pass
         else:
-            raise ValueError("Order must be 'random', 'ascending', or 'descending'")
+            raise ValueError("Order must be 'ascending', 'None' or 'descending'")
 
         batches = []
         index = 0

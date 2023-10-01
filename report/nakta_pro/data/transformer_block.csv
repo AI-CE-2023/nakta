@@ -1,0 +1,12 @@
+Name,Duration
+Fused RMSNorm,477.438 μs
+ColumnParallelLinear,3.557 ms
+ColumnParallelLinear,1.892 ms
+Fused RotaryEmbedding,361.274 μs
+Fused Attention,339.477 μs
+RowParallelLinear,3.114 ms
+Fused RMSNorm,474.364 μs
+ColumnParallelLinear,4.352 ms
+ColumnParallelLinear,4.326 ms
+Fused SwiGLU,317.628 μs
+RowParallelLinear,5.775 ms
