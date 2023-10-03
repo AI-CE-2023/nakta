@@ -1,4 +1,6 @@
 # Nakta
+## Report
+[Nakta Report](https://docs.google.com/document/d/12GCXtvHYw39m9fDLZdi5omF9eA2fgiUp4G7XDLnLyVA/edit?usp=sharing)
 ## 주요 성과
 ### Speed Test
 #### Kernel Speed Test
