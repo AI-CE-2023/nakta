@@ -3,7 +3,7 @@
 ## 주요 성과
 ### Speed Test
 #### Kernel Speed Test
-![Kernel Speed]('./kernel.png')
+![Kernel Speed]('./kernels.png')
 
 | Operation          | Performance Improvement (%) |
 |--------------------|----------------------------|
