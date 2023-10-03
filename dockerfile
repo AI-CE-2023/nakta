@@ -19,3 +19,8 @@ RUN pip uninstall -y triton && \
 RUN git clone https://github.com/EleutherAI/lm-evaluation-harness && \
     cd lm-evaluation-harness && \
     pip install -e .
+# Clone Our Custom Cuda Kernel repository and install it
+RUN cd ..
+RUN git clone https://github.com/AI-CE-2023/flash.git \
+    cd flash && \
+    make install
