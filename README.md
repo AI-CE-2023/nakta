@@ -45,9 +45,9 @@ nakta_model: Nakta Model implementation
 speed_bench: speed benchmark with hellaswag validation set  
 
 ## Kernel 구현부 링크
-[RMSNorm][https://github.com/AI-CE-2023/nakta/blob/main/nakta_model/kernel/Norm/RmsNorm.py]  
-[Rotary Embedding][https://github.com/AI-CE-2023/nakta/blob/main/nakta_model/kernel/Emb/Rotary/rotary.py]  
-[SwiGLU][https://github.com/AI-CE-2023/flash/blob/main/csrc/flash_attn/activation_kernel.cu]  
+[RMSNorm](https://github.com/AI-CE-2023/nakta/blob/main/nakta_model/kernel/Norm/RmsNorm.py)   
+[Rotary Embedding](https://github.com/AI-CE-2023/nakta/blob/main/nakta_model/kernel/Emb/Rotary/rotary.py)   
+[SwiGLU](https://github.com/AI-CE-2023/flash/blob/main/csrc/flash_attn/activation_kernel.cu)  
 *Memory Efficient Attention 의 경우 Pytorch 2.0.1 의 구현을 사용하였음.
 
 ## 참고 프로젝트 
