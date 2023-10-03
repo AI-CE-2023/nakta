@@ -47,10 +47,8 @@ def plot_combined_data_total_speed(batch_sizes: list):
         )
 
     plt.xlabel("ctx_len")
-    plt.ylabel("Total Speed (batch/second)")
-    plt.title(
-        "Combined Cached Speed vs Non-Cached Speed by Context Length (Total Speed)"
-    )
+    plt.ylabel("Speed (batch/second)")
+    plt.title("Combined Cached Speed vs Non-Cached Speed by Context Length")
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
@@ -61,5 +59,5 @@ def plot_combined_data_total_speed(batch_sizes: list):
 
 
 # List of batch sizes for which data was saved in CSV files
-batch_sizes = [16, 32, 64, 72, 80, 92]
+batch_sizes = [16, 32, 64, 72]
 plot_combined_data_total_speed(batch_sizes)

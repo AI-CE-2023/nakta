@@ -5,13 +5,13 @@ import numpy as np
 import pandas as pd
 import torch
 
-font = {
-    "family": "serif",
-    # 'weight' : 'bold',
-    "size": 18,
-}
+# font = {
+#     "family": "serif",
+#     # 'weight' : 'bold',
+#     "size": 18,
+# }
 
-mpl.rc("font", **font)
+# mpl.rc("font", **font)
 
 
 def silu_and_mul_cuda(
@@ -125,7 +125,7 @@ def main():
     ax.set_ylim(bottom=0)
     ax.set_xlabel("Sequence length")
     ax.set_ylabel("Effective bandwidth [GB/s]")
-    ax.grid(which="both")
+    # ax.grid(which="both")
     fig.legend(loc="lower right")
 
     fig.tight_layout()

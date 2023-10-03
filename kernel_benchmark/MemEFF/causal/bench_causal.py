@@ -1,6 +1,7 @@
-import triton
-import torch
 import math
+
+import torch
+import triton
 
 HAS_FLASH = False
 
@@ -10,24 +11,21 @@ CAUSAL = True
 configs = [
     triton.testing.Benchmark(
         x_names=["N_CTX"],
-        x_vals=[i*16 for i in range(1, 8)],
+        x_vals=[i * 16 for i in range(1, 8)],
         line_arg="provider",
         line_vals=
         # ["triton"]
-        [] 
-        + (["native"])
-        + (["native_r"]),
+        [] + (["native"]) + (["native_r"]),
         # line_vals=["triton"] + (["flash"] if HAS_FLASH else []),
         line_names=
         # ["Triton"]
-        [] 
-        + (["pytorch-mem-eff"])
-        + (["pytorch-native"]),
+        [] + (["pytorch-mem-eff"]) + (["pytorch-native"]),
         # line_names=["Triton"] + ([f"Flash-{FLASH_VER}"] if HAS_FLASH else []),
         styles=[
-            # ("red", "-"), 
-            ("green", "-"), 
-            ("orange", "-")],
+            # ("red", "-"),
+            ("green", "-"),
+            ("orange", "-"),
+        ],
         ylabel="tf/s",
         plot_name=f"fused-attention-batch{BATCH}-head{N_HEADS}-d{D_HEAD}-{mode}-{'causal' if CAUSAL else 'noncausal'}",
         args={
