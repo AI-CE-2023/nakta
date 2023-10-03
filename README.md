@@ -1,5 +1,4 @@
 # Nakta
-
 ## 주요 성과
 ### Speed Test
 #### Kernel Speed Test
@@ -37,6 +36,20 @@ Nakta vs LLAMA: 1.86x faster / Nakta with Cache vs LLAMA: 2.37x faster
 CUDA 11.7 Torch 2.0.1 triton-nightly 2.1.0  
 <br/>
 dockerfile 의 경우 docker 설치가 안 되는 작업 환경에서 작업하여 작동을 장담할 수 없습니다. 설치 내용은 같으니 참고 부탁드립니다.
+## Repository 가이드  
+accuracy_test: hellaswag validation set 에 대한 accuracy test  
+kernel_benchmark: kernel benchmark + graph  
+llama_org: LLAMA-1 original implementation  
+model_profile:  nsys profile results of LLAMA-1, Nakta, Nakta with cache  
+nakta_model: Nakta Model implementation  
+speed_bench: speed benchmark with hellaswag validation set  
+
+## Kernel 구현부 링크
+[RMSNorm][https://github.com/AI-CE-2023/nakta/blob/main/nakta_model/kernel/Norm/RmsNorm.py]  
+[Rotary Embedding][https://github.com/AI-CE-2023/nakta/blob/main/nakta_model/kernel/Emb/Rotary/rotary.py]  
+[SwiGLU][https://github.com/AI-CE-2023/flash/blob/main/csrc/flash_attn/activation_kernel.cu]  
+*Memory Efficient Attention 의 경우 Pytorch 2.0.1 의 구현을 사용하였음.
+
 ## 참고 프로젝트 
   - Accuracy Test: https://github.com/EleutherAI/lm-evaluation-harness
   - Rotary Embedding, RMSNorm: https://github.com/openai/triton https://github.com/Dao-AILab/flash-attention
