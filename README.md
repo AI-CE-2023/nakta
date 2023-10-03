@@ -26,9 +26,7 @@ Nakta vs LLAMA: 1.86x faster / Nakta with Cache vs LLAMA: 2.37x faster
 ## 실행 가이드
 ### 설치 및 weight 변환 
 <code>git clone https://github.com/AI-CE-2023/nakta.git</code>  
-<br/>  
 <code>cd nakta</code>  
-<br/>  
 <code>python convert.py --input_path {Your Original Weight Path} --output_path {Your Output Path}</code>  
  다음 weigth 변환은 weight 내용을 변환하는 것이 아닌 Rotary Embedding 시에 Query, Key 를 한번에 넣어주기 위해 Weight 를 합치는 내용입니다. 또한 Parallel Embedding 을 Normal Embedding 으로 바꾸기 위해 합친 Weight 에 대한 내용을 담고 있습니다.  
 <code>cd speed_bench</code>  
