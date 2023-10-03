@@ -30,15 +30,10 @@ Nakta vs LLAMA: 1.86x faster / Nakta with Cache vs LLAMA: 2.37x faster
 <code>cd nakta</code>  
 <br/>  
 <code>python convert.py --input_path {Your Original Weight Path} --output_path {Your Output Path}</code>  
-<br/>  
  다음 weigth 변환은 weight 내용을 변환하는 것이 아닌 Rotary Embedding 시에 Query, Key 를 한번에 넣어주기 위해 Weight 를 합치는 내용입니다. 또한 Parallel Embedding 을 Normal Embedding 으로 바꾸기 위해 합친 Weight 에 대한 내용을 담고 있습니다.  
- <br/>
 <code>cd speed_bench</code>  
-<br/>  
 <code>torchrun --nproc_per_node 4 nakta_speed.py</code>  
-<br/>  
 <code>torchrun --nproc_per_node 4 llama_speed.py</code>  
-<br/>  
 *llama_speed 와 nakta_speed 를 실행하기전 weigth 와 tokenizer 의 경로를 수정 부탁드립니다.
 ## 사용 환경
 CUDA 11.7 Torch 2.0.1 triton-nightly 2.1.0  
