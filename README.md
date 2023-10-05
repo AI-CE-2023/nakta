@@ -25,30 +25,38 @@ Nakta vs LLAMA: 1.86x faster / Nakta with Cache vs LLAMA: 2.37x faster
 
 **Accuracy drop 없이 2.37배 빠른 모델 구현**
 ## 실행 가이드
-### 환경 구축 가이드(pytorch 2.0.1)  
-1. Triton 재설치
-기존에 설치되어 있는 triton을 제거하고, triton-nightly를 설치합니다.    
-<code>
-pip uninstall -y triton  
-pip install -U --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/Triton-Nightly/pypi/simple/ triton-nightly  
-</code>  
-2. lm-evaluation-harness 리포지토리 클론 및 설치  
-<code>  
-git clone https://github.com/EleutherAI/lm-evaluation-harness  
-cd lm-evaluation-harness  
-pip install -e .  
-cd ..  
-</code>  
-4. Custom Cuda Kernel 리포지토리 클론 및 설치  
-<code>
-git clone https://github.com/AI-CE-2023/flash.git  
-cd flash  
-make install
-</code>  
-### 설치 및 weight 변환 
-<code>git clone https://github.com/AI-CE-2023/nakta.git</code>  
-<code>cd nakta</code>  
-<code>python convert.py --input_path {Your Original Weight Path} --output_path {Your Output Path}</code>  
+### 환경 구축 가이드 (pytorch 2.0.1)
+
+1. **Triton 재설치**
+   - 기존에 설치되어 있는 Triton을 제거하고, Triton-nightly를 설치합니다.
+     ```bash
+     pip uninstall -y triton
+     pip install -U --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/Triton-Nightly/pypi/simple/ triton-nightly
+     ```
+
+2. **lm-evaluation-harness 리포지토리 클론 및 설치**
+   - lm-evaluation-harness 리포지토리를 클론하고 설치합니다.
+     ```bash
+     git clone https://github.com/EleutherAI/lm-evaluation-harness
+     cd lm-evaluation-harness
+     pip install -e .
+     cd ..
+     ```
+
+3. **Custom Cuda Kernel 리포지토리 클론 및 설치**
+   - Custom Cuda Kernel 리포지토리를 클론하고 설치합니다.
+     ```bash
+     git clone https://github.com/AI-CE-2023/flash.git
+     cd flash
+     make install
+     ```
+### 설치 및 weight 변환  
+### 설치 및 Weight 변환
+```bash
+git clone https://github.com/AI-CE-2023/nakta.git
+cd nakta
+python convert.py --input_path {Your Original Weight Path} --output_path {Your Output Path}
+```  
  다음 weigth 변환은 weight 내용을 변환하는 것이 아닌 Rotary Embedding 시에 Query, Key 를 한번에 넣어주기 위해 Weight 를 합치는 내용입니다. 또한 Parallel Embedding 을 Normal Embedding 으로 바꾸기 위해 합친 Weight 에 대한 내용을 담고 있습니다.  
 <code>cd speed_bench</code>  
 <code>torchrun --nproc_per_node 4 nakta_speed.py</code>  
