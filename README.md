@@ -25,7 +25,7 @@ Nakta vs LLAMA: 1.86x faster / Nakta with Cache vs LLAMA: 2.37x faster
 
 **Accuracy drop 없이 2.37배 빠른 모델 구현**
 ## 실행 가이드
-### 환경 구축 가이드 (pytorch 2.0.1 CUDA 11.7)
+### 환경 구축 가이드 (pytorch 2.0.1 CUDA 11.7, install [LLAMA Original Requirements](https://github.com/facebookresearch/llama/blob/llama_v1/requirements.txt)
 
 1. **Triton 재설치**
    - 기존에 설치되어 있는 Triton을 제거하고, Triton-nightly를 설치합니다.
