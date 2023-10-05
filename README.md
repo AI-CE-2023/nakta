@@ -27,29 +27,30 @@ Nakta vs LLAMA: 1.86x faster / Nakta with Cache vs LLAMA: 2.37x faster
 ## 실행 가이드
 ### 환경 구축 가이드 (pytorch 2.0.1 CUDA 11.7, install [LLAMA Original Requirements](https://github.com/facebookresearch/llama/blob/llama_v1/requirements.txt)
 
-1. **Triton 재설치**
-   - 기존에 설치되어 있는 Triton을 제거하고, Triton-nightly를 설치합니다.
-     ```bash
-     pip uninstall -y triton 
-     pip install -U --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/Triton-Nightly/pypi/simple/ triton-nightly
-     ```
-
-2. **lm-evaluation-harness 리포지토리 클론 및 설치**
+1. **lm-evaluation-harness 리포지토리 클론 및 설치**
    - lm-evaluation-harness 리포지토리를 클론하고 설치합니다.
      ```bash
      git clone https://github.com/EleutherAI/lm-evaluation-harness 
      cd lm-evaluation-harness 
      pip install -e . 
      cd ..
+     pip uninstall lm-eval
      ```
 
-3. **Custom Cuda Kernel 리포지토리 클론 및 설치**
+2. **Custom Cuda Kernel 리포지토리 클론 및 설치**
    - Custom Cuda Kernel 리포지토리를 클론하고 설치합니다.
      ```bash
      git clone https://github.com/AI-CE-2023/flash.git 
      cd flash 
      make install
      ```
+     
+3. **Triton 재설치**
+   - 기존에 설치되어 있는 Triton을 제거하고, Triton-nightly를 설치합니다.
+     ```bash
+     pip uninstall -y triton 
+     pip install -U --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/Triton-Nightly/pypi/simple/ triton-nightly
+     ```  
 ### 설치 및 Weight 변환
 ```bash
 git clone https://github.com/AI-CE-2023/nakta.git 
