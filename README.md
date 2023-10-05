@@ -49,7 +49,7 @@ Nakta vs LLAMA: 1.86x faster / Nakta with Cache vs LLAMA: 2.37x faster
    - 기존에 설치되어 있는 Triton을 제거하고, Triton-nightly를 설치합니다.
      ```bash
      pip uninstall -y triton 
-     pip install -U --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/Triton-Nightly/pypi/simple/ triton-nightly
+     pip install -U --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/Triton-Nightly/pypi/simple/ triton-nightly==2.1.0.dev20230822000928
      ```  
 ### 설치 및 Weight 변환
 ```bash
@@ -65,7 +65,7 @@ torchrun --nproc_per_node 4 llama_speed.py
 ```
 *llama_speed 와 nakta_speed 를 실행하기전 weigth 와 tokenizer 의 경로를 수정 부탁드립니다.
 ## 사용 환경
-CUDA 11.7 Torch 2.0.1 triton-nightly 2.1.0  
+CUDA 11.7 Torch 2.0.1 triton-nightly 2.1.0.dev20230822000928 
 <br/>
 dockerfile 의 경우 docker 설치가 안 되는 작업 환경에서 작업하여 작동을 장담할 수 없습니다. 설치 내용은 같으니 참고 부탁드립니다.
 ## Repository 가이드  
