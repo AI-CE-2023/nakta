@@ -30,30 +30,30 @@ Nakta vs LLAMA: 1.86x faster / Nakta with Cache vs LLAMA: 2.37x faster
 1. **Triton 재설치**
    - 기존에 설치되어 있는 Triton을 제거하고, Triton-nightly를 설치합니다.
      ```bash
-     pip uninstall -y triton \
+     pip uninstall -y triton 
      pip install -U --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/Triton-Nightly/pypi/simple/ triton-nightly
      ```
 
 2. **lm-evaluation-harness 리포지토리 클론 및 설치**
    - lm-evaluation-harness 리포지토리를 클론하고 설치합니다.
      ```bash
-     git clone https://github.com/EleutherAI/lm-evaluation-harness \
-     cd lm-evaluation-harness \
-     pip install -e . \
+     git clone https://github.com/EleutherAI/lm-evaluation-harness 
+     cd lm-evaluation-harness 
+     pip install -e . 
      cd ..
      ```
 
 3. **Custom Cuda Kernel 리포지토리 클론 및 설치**
    - Custom Cuda Kernel 리포지토리를 클론하고 설치합니다.
      ```bash
-     git clone https://github.com/AI-CE-2023/flash.git \
-     cd flash \
+     git clone https://github.com/AI-CE-2023/flash.git 
+     cd flash 
      make install
      ```
 ### 설치 및 Weight 변환
 ```bash
-git clone https://github.com/AI-CE-2023/nakta.git \
-cd nakta \
+git clone https://github.com/AI-CE-2023/nakta.git 
+cd nakta 
 python convert.py {Your Original Weight Path} {Your Output Path}
 ```  
  다음 weigth 변환은 weight 내용을 변환하는 것이 아닌 Rotary Embedding 시에 Query, Key 를 한번에 넣어주기 위해 Weight 를 합치는 내용입니다. 또한 Parallel Embedding 을 Normal Embedding 으로 바꾸기 위해 합친 Weight 에 대한 내용을 담고 있습니다.  
