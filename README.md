@@ -26,37 +26,25 @@ Nakta vs LLAMA: 1.86x faster / Nakta with Cache vs LLAMA: 2.37x faster
 **Accuracy drop 없이 2.37배 빠른 모델 구현**
 ## 실행 가이드
 ### 환경 구축 가이드(pytorch 2.0.1)  
-
-1. nakta_model package 설치  
-<code>
-git clone https://github.com/AI-CE-2023/nakta.git  
-pip install .  
-cd ..  
-</code>
-
-3. Triton 재설치
-
-기존에 설치되어 있는 triton을 제거하고, triton-nightly를 설치합니다.  
+1. Triton 재설치
+기존에 설치되어 있는 triton을 제거하고, triton-nightly를 설치합니다.    
 <code>
 pip uninstall -y triton  
 pip install -U --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/Triton-Nightly/pypi/simple/ triton-nightly  
 </code>  
-
-3. lm-evaluation-harness 리포지토리 클론 및 설치  
+2. lm-evaluation-harness 리포지토리 클론 및 설치  
 <code>  
 git clone https://github.com/EleutherAI/lm-evaluation-harness  
 cd lm-evaluation-harness  
 pip install -e .  
 cd ..  
-</code>
-
+</code>  
 4. Custom Cuda Kernel 리포지토리 클론 및 설치  
 <code>
 git clone https://github.com/AI-CE-2023/flash.git  
 cd flash  
 make install
-</code>
-
+</code>  
 ### 설치 및 weight 변환 
 <code>git clone https://github.com/AI-CE-2023/nakta.git</code>  
 <code>cd nakta</code>  
