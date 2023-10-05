@@ -50,7 +50,6 @@ Nakta vs LLAMA: 1.86x faster / Nakta with Cache vs LLAMA: 2.37x faster
      cd flash
      make install
      ```
-### 설치 및 weight 변환  
 ### 설치 및 Weight 변환
 ```bash
 git clone https://github.com/AI-CE-2023/nakta.git
