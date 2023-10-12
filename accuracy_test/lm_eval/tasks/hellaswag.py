@@ -1,3 +1,5 @@
+import os
+import pickle
 import re
 
 from lm_eval.base import MultipleChoiceTask
@@ -32,7 +34,11 @@ class HellaSwag(MultipleChoiceTask):
         return self._training_docs
 
     def validation_docs(self):
-        return list(map(self._process_doc, self.dataset["validation"]))
+        to_return = list(map(self._process_doc, self.dataset["validation"]))[:64]
+        # if int(os.environ.get("LOCAL_RANK", -1)) == 0:
+        #     with open("./test2.pickle", "wb") as fb:
+        #         pickle.dump(to_return, fb)
+        return to_return
 
     def _process_doc(self, doc):
         ctx = doc["ctx_a"] + " " + doc["ctx_b"].capitalize()

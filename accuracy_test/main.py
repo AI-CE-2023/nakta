@@ -128,10 +128,10 @@ def main(local_rank, world_size):
         dumped = json.dumps(results, indent=2)
         print(dumped)
 
-        if args.output_path:
-            os.makedirs(os.path.dirname(args.output_path), exist_ok=True)
-            with open(args.output_path, "w") as f:
-                f.write(dumped)
+        # if args.output_path:
+        #     os.makedirs(os.path.dirname(args.output_path), exist_ok=True)
+        #     with open(args.output_path, "w") as f:
+        #         f.write(dumped)
 
         print(evaluator.make_table(results))
 

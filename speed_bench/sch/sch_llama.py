@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
+from datasets import load_dataset
 from torch.utils.data import DataLoader, Dataset
 
 from nakta_model import Tokenizer
@@ -13,7 +14,6 @@ from nakta_model import Tokenizer
 class SpeedDataset(Dataset):
     def __init__(
         self,
-        strings: List[str],
         tokenizer_path: str,
         order: str = "random",
         default_batch_size: int = 32,
@@ -22,17 +22,33 @@ class SpeedDataset(Dataset):
     ):
         self.device = device
 
-        self.strings = strings
+        self.dataset = load_dataset("hellaswag", split="validation")
+
         self.order = order
         self.default_batch_size = default_batch_size
         self.batch_scheduler = batch_scheduler
         self.tokenizer = Tokenizer(model_path=tokenizer_path)
-        self.tokenized_strings = self._concat_strings(self.strings)
+        self.tokenized_strings = self._concat_strings()[:64]
 
         self.batches = self._create_dataset()
 
-    def _concat_strings(self, strings: List[str]) -> List[List[int]]:
-        return [s[1] + s[2] for s in strings]
+    def _concat_strings(self) -> List[List[int]]:
+        to_return = []
+        for s_z in self.dataset:
+            tokens = []
+            query = (
+                s_z["activity_label"]
+                + ": "
+                + s_z["ctx_a"]
+                + " "
+                + s_z["ctx_b"].capitalize()
+            )
+            query = self.tokenizer.encode(query, bos=False, eos=False)
+            for c in s_z["endings"]:
+                cont_encode = self.tokenizer.encode(c[:], bos=False, eos=False)
+                tokens.append((query + cont_encode, len(cont_encode)))
+            to_return.append((tokens, int(s_z["label"])))
+        return to_return
 
     def _create_dataset(self):
         if self.order == "ascending":
@@ -46,18 +62,24 @@ class SpeedDataset(Dataset):
 
         batches = []
         index = 0
-
+        golds = []
         # Loop until all tokenized strings are batched
         while index < len(self.tokenized_strings):
             if self.batch_scheduler:
                 batch_size = self.batch_scheduler(index, self.tokenized_strings[index:])
             else:
-                batch_size = self.default_batch_size
-
-            batch = self.tokenized_strings[index : index + batch_size]
-
-            max_length = max([len(t) for t in batch])
-
+                batch_size = max(self.default_batch_size // 4, 1)
+            batch_pack = self.tokenized_strings[index : index + batch_size]
+            batch = []
+            gold = []
+            continuation_lens = []
+            for i in batch_pack:
+                gold.append(i[1])
+                for j in i[0]:
+                    batch.append(j[0])
+                    continuation_lens.append(j[1])
+            inp_lens = [len(t) for t in batch]
+            max_length = max(inp_lens)
             # tokens = [
             #     t + [self.tokenizer.pad_id] * (max_length - len(t)) for t in batch
             # ]
@@ -66,8 +88,7 @@ class SpeedDataset(Dataset):
             # Convert the list of lists to a tensor
             tokens = torch.tensor(tokens, dtype=torch.long).to(self.device)
 
-            batches.append(tokens)
-
+            batches.append((tokens, inp_lens, continuation_lens, gold))
             index += batch_size
 
         return batches
@@ -113,28 +134,34 @@ if __name__ == "__main__":
 
     from tqdm import tqdm
 
-    # Test
-    with open("../test.pickle", "rb") as fr:
-        strings = pickle.load(fr)
-
+    # # Test
+    # with open("../test2.pickle", "rb") as fr:
+    #     strings = pickle.load(fr)
     # Create the SpeedDatasetTorch object
     speed_dataset_torch = SpeedDataset(
-        strings,
         tokenizer_path="../../weights/original/tokenizer.model",
         order="ascending",
-        default_batch_size=120,
+        default_batch_size=1,
         # batch_scheduler=length_based_batch_scheduler,
     )
 
-    print(speed_dataset_torch.batches[1].shape)
-    print(len(speed_dataset_torch.batches))
+    # print(speed_dataset_torch)
+    # print(len(speed_dataset_torch.batches))
     # Using DataLoader to load the dataset
     dataloader = DataLoader(
         speed_dataset_torch, batch_size=1, shuffle=False, collate_fn=collate_fn
     )
+    dataloader = list(enumerate(dataloader))
+    for i in range(3):
+        print(dataloader[i])
+        # print(strings[i])
+    # for i in dataloader:
+    #     for j in i:
+    #         print(j)
+    #     break
 
     # Gathering statistics
-    df = speed_dataset_torch.gather_statistics()
+    # df = speed_dataset_torch.gather_statistics()
     # print(df)
 
     # # Plotting the statistics

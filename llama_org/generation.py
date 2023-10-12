@@ -133,7 +133,7 @@ class LLaMA:
         return logits, start_event.elapsed_time(end_event) / 1000
 
     def bench(self, tokens):
-        self.model.forward(tokens, 0)
+        return self.model.forward(tokens, 0)
 
 
 def sample_top_p(probs, p):

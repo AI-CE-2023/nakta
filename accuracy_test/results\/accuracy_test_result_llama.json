@@ -1,0 +1,24 @@
+{
+  "results": {
+    "hellaswag": {
+      "acc": 0.6335391356303525,
+      "acc_stderr": 0.004808526802718585,
+      "acc_norm": 0.8264289982075284,
+      "acc_norm_stderr": 0.0037796612246514738
+    }
+  },
+  "versions": {
+    "hellaswag": 0
+  },
+  "config": {
+    "model": "llama",
+    "num_fewshot": 0,
+    "batch_size": null,
+    "batch_sizes": [],
+    "device": null,
+    "no_cache": true,
+    "limit": null,
+    "bootstrap_iters": 100000,
+    "description_dict": {}
+  }
+}

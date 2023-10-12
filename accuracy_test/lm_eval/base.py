@@ -282,7 +282,6 @@ class BaseLM(LM):
 
             string_nll = sum(string_nll)
             loglikelihoods.append(string_nll)
-
         return loglikelihoods
 
     def _loglikelihood_tokens(self, requests, disable_tqdm=False, override_bs=None):
@@ -450,8 +449,11 @@ class BaseLM(LM):
                 logits = logits[inplen - contlen : inplen].unsqueeze(
                     0
                 )  # [1, seq, vocab]
-
-                ## logits 차원 조정
+                # if int(os.environ.get("LOCAL_RANK", -1)) == 0:
+                #     print(inp)
+                #     print(inp.shape)
+                #     print(logits.shape)
+                # ## logits 차원 조정
 
                 # Check if per-token argmax is exactly equal to continuation
                 greedy_tokens = logits.argmax(dim=-1)  ## 가장 확률이 높은 토큰
@@ -836,6 +838,10 @@ class MultipleChoiceTask(Task):
         completion_len = np.array([float(len(i)) for i in doc["choices"]])
         acc_norm = 1.0 if np.argmax(results / completion_len) == gold else 0.0
 
+        if int(os.environ.get("LOCAL_RANK", -1)) == 0:
+            print(gold)
+            print(results)
+            print(completion_len)
         return {
             "acc": acc,
             "acc_norm": acc_norm,
