@@ -73,40 +73,33 @@ def is_tf(
     inp_lens: List[int],
     cont_lens: List[int],
     golds: List,
+    cont_str_lens: List[int],
 ):
-    sums = []
-    for i in range(len(tokens)):
-        token = tokens[i, inp_lens[i] - cont_lens[i] : inp_lens[i]]
-        result = results[i, inp_lens[i] - cont_lens[i] - 1 : inp_lens[i] - 1, :]
-        # token = tokens[i, : inp_lens[i]]
-        # result = results[i, inp_lens[i] - cont_lens[i] : inp_lens[i], :]
-        logits = torch.gather(result, 1, token.unsqueeze(-1)).sum()
-        # print(logits)
-        sums.append(logits)
-    # print(sums)
-    # print(golds)
-    return [1 if golds[0] == np.argmax(np.array(sums)) else 0.0]
-    # to_return = []
-    # # assuming tokens, results, inp_lens, and golds have the same length
-    # for chunk_tokens, chunk_results, chunk_inp_lens, chunk_cont_lens, gold in zip(
-    #     chunked(tokens, 4),
-    #     chunked(results, 4),
-    #     chunked(inp_lens, 4),
-    #     chunked(continuation_lens, 4),
-    #     golds,
-    # ):
-    #     sums = []
-    #     cnt = 0
-    #     max_index = 0
-    #     for token, result, inp_len, cont_len in zip(
-    #         chunk_tokens, chunk_results, chunk_inp_lens, chunk_cont_lens
-    #     ):
-    #         token = token[inp_len - cont_len : inp_len].unsqueeze(0)
-    #         result = result[inp_len - cont_len : inp_len, :].unsqueeze(0)
-    #         logits = torch.gather(result, 2, token.unsqueeze(-1)).squeeze(-1)
-    #         sums.append(logits.sum().item() / cont_len)
-    #     to_return.append(1.0 if gold == sums.index(max(sums)) else 0.0)
-    # return to_return
+    to_return = []
+    for chunked_t, chunked_r, chunked_il, chunked_cl, g, chunked_csl in zip(
+        chunked(tokens, 4),
+        chunked(results, 4),
+        chunked(inp_lens, 4),
+        chunked(cont_lens, 4),
+        golds,
+        chunked(cont_str_lens, 4),
+    ):
+        sums = []
+        for t, r, il, cl, csl in zip(
+            chunked_t,
+            chunked_r,
+            chunked_il,
+            chunked_cl,
+            chunked_csl,
+        ):
+            t = t[il - cl : il]
+            r = r[il - cl - 1 : il - 1, :]
+            # logits = torch.gather(r, 1, t.unsqueeze(-1)).sum() / csl
+            logits = torch.gather(r, 1, t.unsqueeze(-1)).sum()
+            sums.append(logits)
+        print(sums)
+        to_return.append(1 if g == np.argmax(np.array(sums)) else 0.0)
+    return to_return
 
 
 def main(
@@ -122,7 +115,9 @@ def main(
     # with open("./test2.pickle", "rb") as fr:
     #     validset = pickle.load(fr)[:128]
 
-    default_batch_size = 1
+    default_batch_size = 64
+
+    assert default_batch_size % 4 == 0
 
     valid_datas = SpeedDataset(
         # validset,
@@ -145,10 +140,14 @@ def main(
     end_event = torch.cuda.Event(enable_timing=True)
     torch.cuda.synchronize()
     start_event.record()
-    for tokens, inp_lens, continuation_lens, golds in tqdm(dataloader):
+    for tokens, inp_lens, continuation_lens, golds, cont_str_lens in tqdm(dataloader):
         result = F.log_softmax(generator.model(tokens, 0), dim=-1).cpu()
         # ts_event.record()
-        tfs.extend(is_tf(tokens.cpu(), result, inp_lens, continuation_lens, golds))
+        tfs.extend(
+            is_tf(
+                tokens.cpu(), result, inp_lens, continuation_lens, golds, cont_str_lens
+            )
+        )
         # te_event.record()
         # tf_events.append(ts_event.elapsed_time(te_event) / 1000)
 
@@ -156,7 +155,7 @@ def main(
     torch.cuda.synchronize()
     total_time = start_event.elapsed_time(end_event) / 1000
     print(total_time)
-    # print(sum(tf_events) / len(tf_events))
+    # print(sum(tf_events) * 100 / total_time)
 
     model_name = "llama"
     if local_rank == 0:

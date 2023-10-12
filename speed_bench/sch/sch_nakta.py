@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
+from datasets import load_dataset
 from torch.utils.data import DataLoader, Dataset
 
 from nakta_model import Tokenizer
@@ -14,7 +15,7 @@ from nakta_model import Tokenizer
 class SpeedDataset(Dataset):
     def __init__(
         self,
-        strings: List[str],
+        # strings: List[str],
         tokenizer_path: str,
         order: str = "random",
         default_batch_size: int = 32,
@@ -24,32 +25,65 @@ class SpeedDataset(Dataset):
     ):
         self.device = device
 
-        self.strings = strings
+        self.dataset = load_dataset("hellaswag", split="validation")
+
         self.order = order
         self.default_batch_size = default_batch_size
         self.min_batch_size = min_batch_size
         self.batch_scheduler = batch_scheduler
         self.tokenizer = Tokenizer(model_path=tokenizer_path)
-        self.tokenized_strings = self._pack_strings(self.strings)
+        self.tokenized_strings = self._concat_strings()[:1]
 
         self.batches = self._create_dataset()
 
-    def _pack_strings(self, strings: List[str]):
-        for_return = []
-        for s in range(0, len(strings), 4):
-            to_proc = strings[s : s + 4]
-            ctx = [t[1] for t in to_proc]
-            assert all(x == ctx[0] for x in ctx), "ctxs must be same"
-            ctx = ctx[0]
-
-            followings = [t[2] for t in to_proc]
-
-            follow_lens = [len(f) for f in followings]
-
-            for_return.append(
-                (ctx, followings, len(ctx), sum(follow_lens) / len(follow_lens))
+    def _concat_strings(
+        self,
+    ) -> List:
+        to_return = []
+        for s_z in self.dataset:
+            cont_tokens = []
+            query = (
+                s_z["activity_label"]
+                + ": "
+                + s_z["ctx_a"]
+                + " "
+                + s_z["ctx_b"].capitalize()
             )
-        return for_return
+            query = self.tokenizer.encode(query, bos=False, eos=False)
+            ce_len = 0
+            query_len = len(query)
+            for c in s_z["endings"]:
+                cont_encode = self.tokenizer.encode(c[:], bos=False, eos=False)
+                cont_len = len(cont_encode)
+                cont_tokens.append(
+                    (cont_encode, cont_len, len(c), query_len + cont_len)
+                )
+                ce_len += cont_len
+            to_return.append(
+                (
+                    query,
+                    cont_tokens,
+                    query_len,
+                    cont_len / 4,
+                    int(s_z["label"]),
+                )
+            )
+        return to_return
+        # for_return = []
+        # for s in range(0, len(strings), 4):
+        #     to_proc = strings[s : s + 4]
+        #     ctx = [t[1] for t in to_proc]
+        #     assert all(x == ctx[0] for x in ctx), "ctxs must be same"
+        #     ctx = ctx[0]
+
+        #     followings = [t[2] for t in to_proc]
+
+        #     follow_lens = [len(f) for f in followings]
+
+        #     for_return.append(
+        #         (ctx, followings, len(ctx), sum(follow_lens) / len(follow_lens))
+        #     )
+        # return for_return
 
     def _sort_tokenized_strings(self):
         """Sorts the tokenized strings based on the specified order."""
@@ -77,14 +111,25 @@ class SpeedDataset(Dataset):
 
     def _process_batch(self, batch):
         """Processes a batch to create context and following tokens."""
+        targets = [b[4] for b in batch]
+
         ctx = [b[0] for b in batch]
-        min_ctx = min([len(c) for c in ctx])
-        followings = [f for b in batch for f in b[1]]
-        assert len(ctx) * 4 == len(followings)
+        ctx_lens = [len(c) for c in ctx]
+        min_ctx = min(ctx_lens)
+
+        f_tokens = [f[0] for b in batch for f in b[1]]
+        f_lens = [f[1] for b in batch for f in b[1]]
+        fs_lens = [f[2] for b in batch for f in b[1]]
+        inp_lens = [f[3] for b in batch for f in b[1]]
+
+        # for_inp_lens = ctx_lens * 4
+        # assert len(for_inp_lens) == len(fs_lens)
+
+        assert len(ctx) * 4 == len(f_tokens)
 
         group_size = 4
         new_followings = []
-        for i, f in enumerate(followings):
+        for i, f in enumerate(f_tokens):
             current_ctx = ctx[i // group_size]
             new_following = current_ctx[min_ctx:] + f
             new_followings.append(new_following)
@@ -122,6 +167,10 @@ class SpeedDataset(Dataset):
             min_ctx,
             min_following,
             std_following / avg_following,
+            inp_lens,
+            f_lens,
+            targets,
+            fs_lens,
         )
 
     def _list_chunk(self, lst, n):
@@ -202,15 +251,14 @@ if __name__ == "__main__":
 
     # Test
     # Test
-    with open("../test.pickle", "rb") as fr:
-        strings = pickle.load(fr)
-    default_batch_size = 4
+    # with open("../test.pickle", "rb") as fr:
+    #     strings = pickle.load(fr)
+    default_batch_size = 64
     # Create the SpeedDatasetTorch object
     speed_dataset_torch = SpeedDataset(
-        strings,
         tokenizer_path="../../weights/original/tokenizer.model",
         order="ascending",
-        default_batch_size=4,
+        default_batch_size=default_batch_size,
         # batch_scheduler=length_based_batch_scheduler,
     )
     check_num = 1

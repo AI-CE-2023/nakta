@@ -4,11 +4,12 @@ import pickle
 import sys
 import time
 from pathlib import Path
-from typing import Tuple
+from typing import List, Tuple
 
 import fire
 import numpy as np
 import torch
+import torch.nn.functional as F
 from fairscale.nn.model_parallel.initialize import initialize_model_parallel
 from sch.sch_nakta import SpeedDataset, collate_fn
 from torch.utils.data import DataLoader
@@ -60,6 +61,50 @@ def load(
     return generator
 
 
+def chunked(iterable, n):
+    """Yield successive n-sized chunks from iterable."""
+    for i in range(0, len(iterable), n):
+        yield iterable[i : i + n]
+
+
+def is_tf(
+    tokens: torch.Tensor,
+    results: torch.Tensor,
+    inp_lens: List[int],
+    cont_lens: List[int],
+    golds: List,
+    cont_str_lens: List[int],
+):
+    to_return = []
+    for chunked_t, chunked_r, chunked_il, chunked_cl, g, chunked_csl in zip(
+        chunked(tokens, 4),
+        chunked(results, 4),
+        chunked(inp_lens, 4),
+        chunked(cont_lens, 4),
+        golds,
+        chunked(cont_str_lens, 4),
+    ):
+        sums = []
+        for t, r, il, cl, csl in zip(
+            chunked_t,
+            chunked_r,
+            chunked_il,
+            chunked_cl,
+            chunked_csl,
+        ):
+            t = t[il - cl : il]
+            r = r[il - cl - 1 : il - 1, :]
+            pre_logits = torch.gather(r, 1, t.unsqueeze(-1))
+            # logits = pre_logits.sum() / csl
+            logits = pre_logits.sum()
+            sums.append(logits)
+        print(sums)
+        to_append = 1 if g == np.argmax(np.array(sums)) else 0.0
+        # print(to_append)
+        to_return.append(to_append)
+    return to_return
+
+
 def main(
     ckpt_dir: str,
     tokenizer_path: str,
@@ -70,15 +115,15 @@ def main(
 
     generator = load(ckpt_dir, tokenizer_path, local_rank, world_size)
 
-    with open("./test.pickle", "rb") as fr:
-        validset = pickle.load(fr)
+    # with open("./test.pickle", "rb") as fr:
+    #     validset = pickle.load(fr)
 
     default_batch_size = 16
 
     cache = True
 
     valid_datas = SpeedDataset(
-        validset,
+        # validset,
         tokenizer_path=tokenizer_path,
         order="descending",
         default_batch_size=default_batch_size,
@@ -89,17 +134,64 @@ def main(
         valid_datas, batch_size=1, shuffle=True, collate_fn=collate_fn
     )
 
-    first_batch = next(iter(dataloader))
+    # first_batch = next(iter(dataloader))
 
-    for _ in range(2):
-        generator.bench(first_batch, cache=cache)
-
+    # for _ in range(2):
+    #     generator.bench(first_batch, cache=cache)
+    tfs = []
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
     torch.cuda.synchronize()
     start_event.record()
-    for batch in tqdm(dataloader):
-        generator.bench(batch, cache=cache)
+    for (
+        ctx_tokens,
+        following_tokens,
+        min_ctx,
+        _,
+        _,
+        inp_lens,
+        f_lens,
+        targets,
+        fs_lens,
+    ) in tqdm(dataloader):
+        generator.model.forward(ctx_tokens, (0, 1, 4))
+        result = generator.model.forward(following_tokens, (min_ctx, 1, 4))
+        torch.save(result, "test.pt")
+        result = F.log_softmax(result, dim=-1).cpu()
+        result = (
+            result.reshape(result.shape[0] // 4, 4, result.shape[1], -1)
+            .permute(1, 0, 2, 3)
+            .contiguous()
+            .view(result.shape[0], result.shape[1], -1)
+        )
+        ctx_tokens = ctx_tokens.cpu().repeat(4, 1)
+        following_tokens = following_tokens.cpu()
+        tokens = torch.cat((ctx_tokens, following_tokens), dim=1)
+        tokens = (
+            tokens.reshape(tokens.shape[0] // 4, 4, -1)
+            .permute(1, 0, 2)
+            .contiguous()
+            .view(tokens.shape[0], -1)
+        )
+        assert tokens.shape == result.shape[:-1]
+        # print(tokens)
+        # print(result)
+        # print(inp_lens)
+        # print(f_lens)
+        # print(targets)
+        # print(fs_lens)
+        # print(result.shape)
+        # print(following_tokens.shape)
+        tfs.extend(
+            is_tf(
+                tokens,
+                result,
+                inp_lens,
+                f_lens,
+                targets,
+                fs_lens,
+            )
+        )
     end_event.record()
     torch.cuda.synchronize()
 
@@ -114,10 +206,11 @@ def main(
             "model_name": model_name,
             "execution_time": total_time,
             "cache": cache,
+            "accuracy": sum(tfs) / len(tfs),
         }
-
+        print(result["accuracy"])
         with open(
-            f"./results/{model_name}_speed_test_{default_batch_size*4}.json", "w"
+            f"./{model_name}_speed_test_{default_batch_size*4}.json", "w"
         ) as json_file:
             json.dump(result, json_file, indent=4)
 

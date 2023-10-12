@@ -28,7 +28,7 @@ class SpeedDataset(Dataset):
         self.default_batch_size = default_batch_size
         self.batch_scheduler = batch_scheduler
         self.tokenizer = Tokenizer(model_path=tokenizer_path)
-        self.tokenized_strings = self._concat_strings()[:64]
+        self.tokenized_strings = self._concat_strings()[:1]
 
         self.batches = self._create_dataset()
 
@@ -46,15 +46,17 @@ class SpeedDataset(Dataset):
             query = self.tokenizer.encode(query, bos=False, eos=False)
             for c in s_z["endings"]:
                 cont_encode = self.tokenizer.encode(c[:], bos=False, eos=False)
-                tokens.append((query + cont_encode, len(cont_encode)))
+                tokens.append((query + cont_encode, len(cont_encode), len(c)))
             to_return.append((tokens, int(s_z["label"])))
         return to_return
 
     def _create_dataset(self):
         if self.order == "ascending":
-            self.tokenized_strings.sort(key=len)
+            self.tokenized_strings.sort(key=lambda x: sum([len(i[0]) for i in x[0]]))
         elif self.order == "descending":
-            self.tokenized_strings.sort(key=len, reverse=True)
+            self.tokenized_strings.sort(
+                key=lambda x: sum([len(i[0]) for i in x[0]]), reverse=True
+            )
         elif self.order == "None":
             pass
         else:
@@ -73,11 +75,13 @@ class SpeedDataset(Dataset):
             batch = []
             gold = []
             continuation_lens = []
+            continuation_str_lens = []
             for i in batch_pack:
                 gold.append(i[1])
                 for j in i[0]:
                     batch.append(j[0])
                     continuation_lens.append(j[1])
+                    continuation_str_lens.append(j[2])
             inp_lens = [len(t) for t in batch]
             max_length = max(inp_lens)
             # tokens = [
@@ -88,7 +92,9 @@ class SpeedDataset(Dataset):
             # Convert the list of lists to a tensor
             tokens = torch.tensor(tokens, dtype=torch.long).to(self.device)
 
-            batches.append((tokens, inp_lens, continuation_lens, gold))
+            batches.append(
+                (tokens, inp_lens, continuation_lens, gold, continuation_str_lens)
+            )
             index += batch_size
 
         return batches
@@ -140,8 +146,8 @@ if __name__ == "__main__":
     # Create the SpeedDatasetTorch object
     speed_dataset_torch = SpeedDataset(
         tokenizer_path="../../weights/original/tokenizer.model",
-        order="ascending",
-        default_batch_size=1,
+        order="descending",
+        default_batch_size=64,
         # batch_scheduler=length_based_batch_scheduler,
     )
 
@@ -151,9 +157,12 @@ if __name__ == "__main__":
     dataloader = DataLoader(
         speed_dataset_torch, batch_size=1, shuffle=False, collate_fn=collate_fn
     )
-    dataloader = list(enumerate(dataloader))
-    for i in range(3):
-        print(dataloader[i])
+    cnt = 0
+    for tokens, inp_lens, continuation_lens, golds, cont_str_lens in tqdm(dataloader):
+        print(tokens.shape)
+        cnt += 1
+        if cnt == 100:
+            break
         # print(strings[i])
     # for i in dataloader:
     #     for j in i:
