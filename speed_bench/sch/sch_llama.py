@@ -28,7 +28,7 @@ class SpeedDataset(Dataset):
         self.default_batch_size = default_batch_size
         self.batch_scheduler = batch_scheduler
         self.tokenizer = Tokenizer(model_path=tokenizer_path)
-        self.tokenized_strings = self._concat_strings()[:1]
+        self.tokenized_strings = self._concat_strings()[:]
 
         self.batches = self._create_dataset()
 
@@ -45,6 +45,7 @@ class SpeedDataset(Dataset):
             )
             query = self.tokenizer.encode(query, bos=False, eos=False)
             for c in s_z["endings"]:
+                # c = c[:-1]
                 cont_encode = self.tokenizer.encode(c[:], bos=False, eos=False)
                 tokens.append((query + cont_encode, len(cont_encode), len(c)))
             to_return.append((tokens, int(s_z["label"])))

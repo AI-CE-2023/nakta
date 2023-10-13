@@ -92,13 +92,15 @@ def is_tf(
             chunked_cl,
             chunked_csl,
         ):
-            t = t[il - cl : il]
-            r = r[il - cl - 1 : il - 1, :]
-            # logits = torch.gather(r, 1, t.unsqueeze(-1)).sum() / csl
-            logits = torch.gather(r, 1, t.unsqueeze(-1)).sum()
+            # t = t[il - cl : il]
+            # r = r[il - cl - 1 : il - 1, :]
+            t = t[il - cl : il - 1]
+            r = r[il - cl - 1 : il - 2, :]
+            logits = torch.gather(r, 1, t.unsqueeze(-1)).sum() / csl
+            # logits = torch.gather(r, 1, t.unsqueeze(-1)).sum()
             sums.append(logits)
-        print(sums)
-        to_return.append(1 if g == np.argmax(np.array(sums)) else 0.0)
+        # print(sums)
+        to_return.append(1 if g == torch.argmax(torch.tensor(sums)) else 0.0)
     return to_return
 
 
@@ -144,12 +146,9 @@ def main(
     start_event.record()
     for tokens, inp_lens, continuation_lens, golds, cont_str_lens in tqdm(dataloader):
         result = generator.model(tokens, (0, -1, 4))
-        torch.save(result, "ref.pt")
-        result = F.log_softmax(result, dim=-1).cpu()
+        result = F.log_softmax(result, dim=-1)
         tfs.extend(
-            is_tf(
-                tokens.cpu(), result, inp_lens, continuation_lens, golds, cont_str_lens
-            )
+            is_tf(tokens, result, inp_lens, continuation_lens, golds, cont_str_lens)
         )
     end_event.record()
     torch.cuda.synchronize()

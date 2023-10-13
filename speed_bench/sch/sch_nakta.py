@@ -32,7 +32,7 @@ class SpeedDataset(Dataset):
         self.min_batch_size = min_batch_size
         self.batch_scheduler = batch_scheduler
         self.tokenizer = Tokenizer(model_path=tokenizer_path)
-        self.tokenized_strings = self._concat_strings()[:1]
+        self.tokenized_strings = self._concat_strings()[:]
 
         self.batches = self._create_dataset()
 
@@ -64,26 +64,11 @@ class SpeedDataset(Dataset):
                     query,
                     cont_tokens,
                     query_len,
-                    cont_len / 4,
+                    ce_len / 4,
                     int(s_z["label"]),
                 )
             )
         return to_return
-        # for_return = []
-        # for s in range(0, len(strings), 4):
-        #     to_proc = strings[s : s + 4]
-        #     ctx = [t[1] for t in to_proc]
-        #     assert all(x == ctx[0] for x in ctx), "ctxs must be same"
-        #     ctx = ctx[0]
-
-        #     followings = [t[2] for t in to_proc]
-
-        #     follow_lens = [len(f) for f in followings]
-
-        #     for_return.append(
-        #         (ctx, followings, len(ctx), sum(follow_lens) / len(follow_lens))
-        #     )
-        # return for_return
 
     def _sort_tokenized_strings(self):
         """Sorts the tokenized strings based on the specified order."""
@@ -91,8 +76,10 @@ class SpeedDataset(Dataset):
             self.tokenized_strings.sort(key=lambda x: x[2])
         elif self.order == "descending":
             self.tokenized_strings.sort(key=lambda x: x[2], reverse=True)
+        # elif self.order == "None":
+        #     pass
         else:
-            raise ValueError("Order must be 'ascending', or 'descending'")
+            raise ValueError("Order must be 'ascending', 'descending' or 'None")
 
     def _get_batch_size(self, index):
         """Returns the batch size based on the scheduler or the default value."""
@@ -159,6 +146,15 @@ class SpeedDataset(Dataset):
             self.device
         )
 
+        following_tokens = (
+            following_tokens.reshape(
+                following_tokens.shape[0] // 4, 4, following_tokens.shape[1]
+            )
+            .permute(1, 0, 2)
+            .contiguous()
+            .view(following_tokens.shape[0], -1)
+        )
+
         assert ctx_tokens.shape[0] * 4 == following_tokens.shape[0]
 
         return (
@@ -195,6 +191,7 @@ class SpeedDataset(Dataset):
             # batch = self.tokenized_strings[index : index + batch_size]
 
             # adjust by followings
+            ## Important
             batch.sort(key=lambda x: x[3])
             batch = self._list_chunk(batch, original_batch_size)
             # f_batch_size = self._adjust_f_batch_size(ctx, batch_size)
@@ -253,7 +250,7 @@ if __name__ == "__main__":
     # Test
     # with open("../test.pickle", "rb") as fr:
     #     strings = pickle.load(fr)
-    default_batch_size = 64
+    default_batch_size = 16
     # Create the SpeedDatasetTorch object
     speed_dataset_torch = SpeedDataset(
         tokenizer_path="../../weights/original/tokenizer.model",

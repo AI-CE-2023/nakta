@@ -92,14 +92,14 @@ def is_tf(
             chunked_cl,
             chunked_csl,
         ):
-            t = t[il - cl : il]
-            r = r[il - cl - 1 : il - 1, :]
+            t = t[il - cl : il - 1]
+            r = r[il - cl - 1 : il - 2, :]
             pre_logits = torch.gather(r, 1, t.unsqueeze(-1))
-            # logits = pre_logits.sum() / csl
-            logits = pre_logits.sum()
+            logits = pre_logits.sum() / csl
+            # logits = pre_logits.sum()
             sums.append(logits)
-        print(sums)
-        to_append = 1 if g == np.argmax(np.array(sums)) else 0.0
+        # print(sums)
+        to_append = 1 if g == torch.argmax(torch.tensor(sums)) else 0.0
         # print(to_append)
         to_return.append(to_append)
     return to_return
@@ -156,32 +156,26 @@ def main(
     ) in tqdm(dataloader):
         generator.model.forward(ctx_tokens, (0, 1, 4))
         result = generator.model.forward(following_tokens, (min_ctx, 1, 4))
-        torch.save(result, "test.pt")
-        result = F.log_softmax(result, dim=-1).cpu()
+        result = F.log_softmax(result, dim=-1)
+        # result = result.cpu()
         result = (
-            result.reshape(result.shape[0] // 4, 4, result.shape[1], -1)
+            result.reshape(4, result.shape[0] // 4, result.shape[1], -1)
             .permute(1, 0, 2, 3)
             .contiguous()
             .view(result.shape[0], result.shape[1], -1)
         )
-        ctx_tokens = ctx_tokens.cpu().repeat(4, 1)
-        following_tokens = following_tokens.cpu()
+        # ctx_tokens = ctx_tokens.cpu()
+        ctx_tokens = ctx_tokens.repeat(4, 1)
+        # following_tokens = following_tokens.cpu()
         tokens = torch.cat((ctx_tokens, following_tokens), dim=1)
         tokens = (
-            tokens.reshape(tokens.shape[0] // 4, 4, -1)
+            tokens.reshape(4, result.shape[0] // 4, -1)
             .permute(1, 0, 2)
             .contiguous()
             .view(tokens.shape[0], -1)
         )
         assert tokens.shape == result.shape[:-1]
-        # print(tokens)
-        # print(result)
-        # print(inp_lens)
-        # print(f_lens)
-        # print(targets)
-        # print(fs_lens)
-        # print(result.shape)
-        # print(following_tokens.shape)
+
         tfs.extend(
             is_tf(
                 tokens,
