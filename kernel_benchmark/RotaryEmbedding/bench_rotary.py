@@ -72,13 +72,13 @@ def test_rotary_embedding():
     query = torch.rand(1, end, 10, dim, dtype=torch.float16).cuda()
     key = torch.rand(1, end, 10, dim, dtype=torch.float16).cuda()
     value = torch.rand(1, end, 10, dim, dtype=torch.float16).cuda()
-
+    qk = torch.cat((query.unsqueeze(2), key.unsqueeze(2)), dim=2)
     q_out, k_out = rotary_emb_torch(query, key)
 
     rotary_emb = RotaryEmbedding(
         dim=dim, max_seq_len=end, interleaved=True, device=query.device
     )
-    q, k = rotary_emb(query, key)
+    q, k = rotary_emb(qk)
 
     assert torch.allclose(q_out, q, atol=1e-2)
     assert torch.allclose(k_out, k, atol=1e-2)
@@ -104,6 +104,7 @@ def bench_layer_norm(
     x_shape = (64, seq_len, 13, hidden)
     query = torch.randn(x_shape, dtype=dtype, device="cuda")
     key = torch.randn(x_shape, dtype=dtype, device="cuda")
+    qk = torch.cat((query.unsqueeze(2), key.unsqueeze(2)), dim=2)
 
     quantiles = [0.5, 0.2, 0.8]
     torch_rotary = RotaryEmbeddingTorch(dim=hidden, max_seq_len=seq_len)
@@ -114,7 +115,7 @@ def bench_layer_norm(
     if provider == "triton":
 
         def y_fwd():
-            return triton_rotary(query, key)  # noqa: F811, E704
+            return triton_rotary(qk)  # noqa: F811, E704
 
     if provider == "torch":
 

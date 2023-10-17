@@ -17,7 +17,6 @@ from tqdm import tqdm
 
 from nakta_model import LLaMA, ModelArgs, Tokenizer, Transformer
 
-
 def setup_model_parallel() -> Tuple[int, int]:
     local_rank = int(os.environ.get("LOCAL_RANK", -1))
     world_size = int(os.environ.get("WORLD_SIZE", -1))
@@ -57,8 +56,9 @@ def load(
     model.load_state_dict(checkpoint, strict=False)
 
     generator = LLaMA(model, tokenizer)
-    print(f"Loaded in {time.time() - start_time:.2f} seconds")
-    return generator
+    load_time = time.time() - start_time
+    print(f"Loaded in {load_time:.2f} seconds")
+    return generator, load_time
 
 
 def chunked(iterable, n):
@@ -113,27 +113,32 @@ def main(
     if local_rank > 0:
         sys.stdout = open(os.devnull, "w")
 
-    generator = load(ckpt_dir, tokenizer_path, local_rank, world_size)
+    generator, load_time = load(ckpt_dir, tokenizer_path, local_rank, world_size)
 
     # with open("./test.pickle", "rb") as fr:
     #     validset = pickle.load(fr)
 
     default_batch_size = 16
-
+    candidate_mtp = 6
     cache = True
+    order = "descending"
+
+    data_start = time.time()
 
     valid_datas = SpeedDataset(
         # validset,
         tokenizer_path=tokenizer_path,
-        order="descending",
+        order=order,
         default_batch_size=default_batch_size,
         device=f"cuda:{local_rank}",
+        candidate_multiple=candidate_mtp,
     )
 
     dataloader = DataLoader(
         valid_datas, batch_size=1, shuffle=True, collate_fn=collate_fn
     )
 
+    data_end = time.time()
     # first_batch = next(iter(dataloader))
 
     # for _ in range(2):
@@ -190,7 +195,7 @@ def main(
     torch.cuda.synchronize()
 
     total_time = start_event.elapsed_time(end_event) / 1000
-    print(total_time)
+    # print(total_time)
 
     model_name = "nakta"
 
@@ -198,22 +203,34 @@ def main(
         # 결과를 JSON 파일에 저장
         result = {
             "model_name": model_name,
-            "execution_time": total_time,
+            "inference_time": total_time,
+            "preprocessing time": data_end - data_start,
+            "model load time": load_time,
             "cache": cache,
-            "accuracy": sum(tfs) / len(tfs),
+            "acc norm": sum(tfs) / len(tfs),
         }
-        print(result["accuracy"])
+        # print(result["accuracy"])
+        # with open(
+        #     f"./{model_name}_speed_test_{default_batch_size*4}_{candidate_mtp}_{order}.json",
+        #     "w",
+        # ) as json_file:
+        #     json.dump(result, json_file, indent=4)
         with open(
-            f"./{model_name}_speed_test_{default_batch_size*4}.json", "w"
+            f"./{model_name}_speed_test.json",
+            "w",
         ) as json_file:
             json.dump(result, json_file, indent=4)
 
 
 if __name__ == "__main__":
-    main(
-        ckpt_dir="../weights/modified/30B_2",
-        tokenizer_path="../weights/original/tokenizer.model",
-    )
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run the main function with command line arguments.")
+    parser.add_argument("--ckpt_dir", type=str, default="../weights/modified/30B", help="Checkpoint directory path")
+    parser.add_argument("--tokenizer_path", type=str, default="../weights/original/tokenizer.model", help="Tokenizer path")
+
+    args = parser.parse_args()
+    main(args.ckpt_dir, args.tokenizer_path)
 
 """
 torchrun --nproc_per_node 4 nakta_speed.py

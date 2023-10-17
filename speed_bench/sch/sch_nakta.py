@@ -22,8 +22,10 @@ class SpeedDataset(Dataset):
         min_batch_size: int = 10,
         batch_scheduler: Optional[Callable[[int, List[List[int]]], int]] = None,
         device: str = "cpu",
+        candidate_multiple: int = 4,
     ):
         self.device = device
+        self.candidate_multipe = candidate_multiple
 
         self.dataset = load_dataset("hellaswag", split="validation")
 
@@ -32,7 +34,7 @@ class SpeedDataset(Dataset):
         self.min_batch_size = min_batch_size
         self.batch_scheduler = batch_scheduler
         self.tokenizer = Tokenizer(model_path=tokenizer_path)
-        self.tokenized_strings = self._concat_strings()[:]
+        self.tokenized_strings = self._concat_strings()
 
         self.batches = self._create_dataset()
 
@@ -182,7 +184,7 @@ class SpeedDataset(Dataset):
         while index < len(self.tokenized_strings):
             # 4배로 우선 뽑고 안에서 following 에 의해 정렬
             original_batch_size = self._get_batch_size(index)
-            batch_size = original_batch_size * 4
+            batch_size = original_batch_size * self.candidate_multipe
             batch = self.tokenized_strings[index : index + batch_size]
 
             # adjust by ctx
@@ -252,10 +254,12 @@ if __name__ == "__main__":
     #     strings = pickle.load(fr)
     default_batch_size = 16
     # Create the SpeedDatasetTorch object
+    candidate_multipe = 6
     speed_dataset_torch = SpeedDataset(
         tokenizer_path="../../weights/original/tokenizer.model",
         order="ascending",
         default_batch_size=default_batch_size,
+        candidate_multiple=candidate_multipe
         # batch_scheduler=length_based_batch_scheduler,
     )
     check_num = 1
@@ -299,5 +303,5 @@ if __name__ == "__main__":
     plt.tight_layout()
 
     # Save the heatmap as an image
-    plt.savefig("binned_heatmap.png")
+    plt.savefig(f"binned_heatmap_{default_batch_size}_{candidate_multipe}.png")
     plt.show()

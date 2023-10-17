@@ -94,10 +94,10 @@ def is_tf(
         ):
             t = t[il - cl : il]
             r = r[il - cl - 1 : il - 1, :]
-            # logits = torch.gather(r, 1, t.unsqueeze(-1)).sum() / csl
-            logits = torch.gather(r, 1, t.unsqueeze(-1)).sum()
+            logits = torch.gather(r, 1, t.unsqueeze(-1)).sum() / csl
+            # logits = torch.gather(r, 1, t.unsqueeze(-1)).sum()
             sums.append(logits)
-        print(sums)
+        # print(sums)
         to_return.append(1 if g == np.argmax(np.array(sums)) else 0.0)
     return to_return
 
@@ -154,7 +154,7 @@ def main(
     end_event.record()
     torch.cuda.synchronize()
     total_time = start_event.elapsed_time(end_event) / 1000
-    print(total_time)
+    # print(total_time)
     # print(sum(tf_events) * 100 / total_time)
 
     model_name = "llama"
