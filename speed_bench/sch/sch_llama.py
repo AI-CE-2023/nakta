@@ -28,7 +28,7 @@ class SpeedDataset(Dataset):
         self.default_batch_size = default_batch_size
         self.batch_scheduler = batch_scheduler
         self.tokenizer = Tokenizer(model_path=tokenizer_path)
-        self.tokenized_strings = self._concat_strings()[:]
+        self.tokenized_strings = self._concat_strings()[:10]
 
         self.batches = self._create_dataset()
 
