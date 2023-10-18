@@ -76,6 +76,8 @@ def main(
     )
 
     results = generator.prof(ctx_len, follow_len, batch_size, True)
+    if local_rank == 0:
+        torch.save(generator.model.cpu().state_dict(), "./test.pt")
     # torch.save(results, "./nakta.pt")
 
 

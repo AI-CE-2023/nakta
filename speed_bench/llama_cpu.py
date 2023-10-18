@@ -14,7 +14,7 @@ from fairscale.nn.model_parallel.initialize import initialize_model_parallel
 from sch.sch_llama import SpeedDataset, collate_fn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import LlamaPreTrainedModel
+from transformers import LlamaModel
 
 def chunked(iterable, n):
     """Yield successive n-sized chunks from iterable."""
