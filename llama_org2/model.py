@@ -8,6 +8,7 @@ from typing import Optional, Tuple
 # import fairscale.nn.model_parallel.initialize as fs_init
 import torch
 import torch.nn.functional as F
+
 # from fairscale.nn.model_parallel.layers import (
 #     ColumnParallelLinear,
 #     ParallelEmbedding,
@@ -29,6 +30,8 @@ class ModelArgs:
 
     max_batch_size: int = 64
     max_seq_len: int = 256
+
+    pipeline_size: int = 4
 
 
 class RMSNorm(torch.nn.Module):
@@ -74,12 +77,13 @@ def apply_rotary_emb(
     return xq_out.type_as(xq), xk_out.type_as(xk)
 
 
-def attention_native(xq, keys, values, head_dim, mask):
-    scores = torch.matmul(xq, keys.transpose(2, 3)) / math.sqrt(head_dim)
-    if mask is not None:
-        scores = scores + mask  # (bs, n_local_heads, slen, cache_len + slen)
-    scores = F.softmax(scores.float(), dim=-1).type_as(xq)
-    return torch.matmul(scores, values)  # (bs, n_local_heads, slen, head_dim)
+def attention_native(xq, keys, values):
+    # scores = torch.matmul(xq, keys.transpose(2, 3)) / math.sqrt(head_dim)
+    # if mask is not None:
+    #     scores = scores + mask  # (bs, n_local_heads, slen, cache_len + slen)
+    # scores = F.softmax(scores.float(), dim=-1).type_as(xq)
+    # return torch.matmul(scores, values)  # (bs, n_local_heads, slen, head_dim)
+    return F.scaled_dot_product_attention(xq, keys, values)
 
 
 def SwiGLU(x_1, x_2):
@@ -90,7 +94,7 @@ class Attention(nn.Module):
     def __init__(self, args: ModelArgs):
         super().__init__()
         # self.tp_size = args.tp_size
-        self.n_local_heads = args.n_heads 
+        self.n_local_heads = args.n_heads
 
         self.head_dim = args.dim // args.n_heads
 
@@ -123,19 +127,19 @@ class Attention(nn.Module):
             # init_method=lambda x: x,
         )
 
-        self.cache_k = torch.zeros(
-            (args.max_batch_size, args.max_seq_len, self.n_local_heads, self.head_dim)
-        ).cuda()
-        self.cache_v = torch.zeros(
-            (args.max_batch_size, args.max_seq_len, self.n_local_heads, self.head_dim)
-        ).cuda()
+        # self.cache_k = torch.zeros(
+        #     (args.max_batch_size, args.max_seq_len, self.n_local_heads, self.head_dim)
+        # ).cuda()
+        # self.cache_v = torch.zeros(
+        #     (args.max_batch_size, args.max_seq_len, self.n_local_heads, self.head_dim)
+        # ).cuda()
 
     def forward(
         self,
         x: torch.Tensor,
         start_pos: int,
         freqs_cis: torch.Tensor,
-        mask: Optional[torch.Tensor],
+        # mask: Optional[torch.Tensor],
     ):
         bsz, seqlen, _ = x.shape
         xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
@@ -146,20 +150,20 @@ class Attention(nn.Module):
 
         xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
-        self.cache_k = self.cache_k.to(xq)
-        self.cache_v = self.cache_v.to(xq)
+        # self.cache_k = self.cache_k.to(xq)
+        # self.cache_v = self.cache_v.to(xq)
 
-        self.cache_k[:bsz, start_pos : start_pos + seqlen] = xk
-        self.cache_v[:bsz, start_pos : start_pos + seqlen] = xv
+        # self.cache_k[:bsz, start_pos : start_pos + seqlen] = xk
+        # self.cache_v[:bsz, start_pos : start_pos + seqlen] = xv
 
-        keys = self.cache_k[:bsz, : start_pos + seqlen]
-        values = self.cache_v[:bsz, : start_pos + seqlen]
+        # keys = self.cache_k[:bsz, : start_pos + seqlen]
+        # values = self.cache_v[:bsz, : start_pos + seqlen]
 
         xq = xq.transpose(1, 2)
-        keys = keys.transpose(1, 2)
-        values = values.transpose(1, 2)
+        keys = xk.transpose(1, 2)
+        values = xv.transpose(1, 2)
 
-        output = attention_native(xq, keys, values, self.head_dim, mask)
+        output = attention_native(xq, keys, values)
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
 
         return self.wo(output)
@@ -177,15 +181,21 @@ class FeedForward(nn.Module):
         hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
 
         self.w1 = nn.Linear(
-            dim, hidden_dim, bias=False,
+            dim,
+            hidden_dim,
+            bias=False,
             # gather_output=False, init_method=lambda x: x
         )
         self.w2 = nn.Linear(
-            hidden_dim, dim, bias=False, 
+            hidden_dim,
+            dim,
+            bias=False,
             # input_is_parallel=True, init_method=lambda x: x
         )
         self.w3 = nn.Linear(
-            dim, hidden_dim, bias=False, 
+            dim,
+            hidden_dim,
+            bias=False,
             # gather_output=False, init_method=lambda x: x
         )
 
@@ -212,59 +222,71 @@ class TransformerBlock(nn.Module):
         x: torch.Tensor,
         start_pos: int,
         freqs_cis: torch.Tensor,
-        mask: Optional[torch.Tensor],
+        # mask: Optional[torch.Tensor],
     ):
-        h = x + self.attention.forward(
-            self.attention_norm(x), start_pos, freqs_cis, mask
-        )
+        h = x + self.attention.forward(self.attention_norm(x), start_pos, freqs_cis)
         out = h + self.feed_forward.forward(self.ffn_norm(h))
         return out
 
 
 class Transformer(nn.Module):
-    def __init__(self, params: ModelArgs):
+    def __init__(self, params: ModelArgs, gpu_num):
         super().__init__()
+
         self.params = params
         self.vocab_size = params.vocab_size
         self.n_layers = params.n_layers
 
-        self.tok_embeddings = nn.Embedding(
-            params.vocab_size, params.dim, 
-            # init_method=lambda x: x
-        )
+        if gpu_num == 0:
+            self.tok_embeddings = nn.Embedding(
+                params.vocab_size,
+                params.dim,
+                # init_method=lambda x: x
+            )
 
         self.layers = torch.nn.ModuleList()
-        for layer_id in range(params.n_layers):
+        layer_vol = params.n_layers // params.pipeline_size
+
+        layer_index = [(0, 30), (30, 60)]
+        for layer_id in range(
+            # layer_vol * gpu_num,
+            # layer_vol * (gpu_num + 1),
+            layer_index[gpu_num][0],
+            layer_index[gpu_num][1],
+        ):
             self.layers.append(TransformerBlock(layer_id, params))
 
-        self.norm = RMSNorm(params.dim, eps=params.norm_eps)
-        self.output = nn.Linear(
-            params.dim, params.vocab_size, bias=False
-        )
+        if gpu_num == 1:
+            self.norm = RMSNorm(params.dim, eps=params.norm_eps)
+            self.output = nn.Linear(params.dim, params.vocab_size, bias=False)
 
         self.freqs_cis = precompute_freqs_cis(
             self.params.dim // self.params.n_heads, self.params.max_seq_len * 2
         )
 
     @torch.inference_mode()
-    def forward(self, tokens: torch.Tensor, start_pos: int):
-        _bsz, seqlen = tokens.shape
-        h = self.tok_embeddings(tokens)
+    def forward(self, h: torch.Tensor, start_pos: int, gpu_num: int):
+        """
+        h => token or hidden
+        """
+        if gpu_num == 0:
+            _bsz, seqlen = h.shape
+            h = self.tok_embeddings(h)
+        else:
+            _bsz, seqlen, _ = h.shape
+
         self.freqs_cis = self.freqs_cis.to(h.device)
         freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
 
-        mask = None
-        if seqlen > 1:
-            mask = torch.full(
-                (1, 1, seqlen, seqlen), float("-inf"), device=tokens.device
-            )
-            mask = torch.triu(mask, diagonal=start_pos + 1).type_as(h)
-
         for layer in self.layers:
-            h = layer(h, start_pos, freqs_cis, mask)
-        h = self.norm(h)
-        output = self.output(h)  # only compute last logits
-        return output.float()
+            h = layer(h, start_pos, freqs_cis)
+
+        if gpu_num == 1:
+            h = self.norm(h)
+            output = self.output(h)  # only compute last logits
+            return output
+        else:
+            return (h, start_pos, gpu_num + 1)
 
 
 import os

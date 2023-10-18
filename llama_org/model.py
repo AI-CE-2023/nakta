@@ -122,12 +122,12 @@ class Attention(nn.Module):
             init_method=lambda x: x,
         )
 
-        self.cache_k = torch.zeros(
-            (args.max_batch_size, args.max_seq_len, self.n_local_heads, self.head_dim)
-        ).cuda()
-        self.cache_v = torch.zeros(
-            (args.max_batch_size, args.max_seq_len, self.n_local_heads, self.head_dim)
-        ).cuda()
+        # self.cache_k = torch.zeros(
+        #     (args.max_batch_size, args.max_seq_len, self.n_local_heads, self.head_dim)
+        # ).cuda()
+        # self.cache_v = torch.zeros(
+        #     (args.max_batch_size, args.max_seq_len, self.n_local_heads, self.head_dim)
+        # ).cuda()
 
     def forward(
         self,
@@ -145,18 +145,18 @@ class Attention(nn.Module):
 
         xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
-        self.cache_k = self.cache_k.to(xq)
-        self.cache_v = self.cache_v.to(xq)
+        # self.cache_k = self.cache_k.to(xq)
+        # self.cache_v = self.cache_v.to(xq)
 
-        self.cache_k[:bsz, start_pos : start_pos + seqlen] = xk
-        self.cache_v[:bsz, start_pos : start_pos + seqlen] = xv
+        # self.cache_k[:bsz, start_pos : start_pos + seqlen] = xk
+        # self.cache_v[:bsz, start_pos : start_pos + seqlen] = xv
 
-        keys = self.cache_k[:bsz, : start_pos + seqlen]
-        values = self.cache_v[:bsz, : start_pos + seqlen]
+        # keys = self.cache_k[:bsz, : start_pos + seqlen]
+        # values = self.cache_v[:bsz, : start_pos + seqlen]
 
         xq = xq.transpose(1, 2)
-        keys = keys.transpose(1, 2)
-        values = values.transpose(1, 2)
+        keys = xk.transpose(1, 2)
+        values = xv.transpose(1, 2)
 
         output = attention_native(xq, keys, values, self.head_dim, mask)
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
@@ -224,18 +224,18 @@ class Transformer(nn.Module):
         self.vocab_size = params.vocab_size
         self.n_layers = params.n_layers
 
-        self.tok_embeddings = ParallelEmbedding(
-            params.vocab_size, params.dim, init_method=lambda x: x
-        )
+        # self.tok_embeddings = ParallelEmbedding(
+        #     params.vocab_size, params.dim, init_method=lambda x: x
+        # )
 
         self.layers = torch.nn.ModuleList()
         for layer_id in range(params.n_layers):
             self.layers.append(TransformerBlock(layer_id, params))
 
         self.norm = RMSNorm(params.dim, eps=params.norm_eps)
-        self.output = ColumnParallelLinear(
-            params.dim, params.vocab_size, bias=False, init_method=lambda x: x
-        )
+        # self.output = ColumnParallelLinear(
+        #     params.dim, params.vocab_size, bias=False, init_method=lambda x: x
+        # )
 
         self.freqs_cis = precompute_freqs_cis(
             self.params.dim // self.params.n_heads, self.params.max_seq_len * 2
@@ -244,7 +244,7 @@ class Transformer(nn.Module):
     @torch.inference_mode()
     def forward(self, tokens: torch.Tensor, start_pos: int):
         _bsz, seqlen = tokens.shape
-        h = self.tok_embeddings(tokens)
+        # h = self.tok_embeddings(tokens)
         self.freqs_cis = self.freqs_cis.to(h.device)
         freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
 
@@ -258,8 +258,8 @@ class Transformer(nn.Module):
         for layer in self.layers:
             h = layer(h, start_pos, freqs_cis, mask)
         h = self.norm(h)
-        output = self.output(h)  # only compute last logits
-        return output.float()
+        # output = self.output(h)  # only compute last logits
+        # return output.float()
 
 
 import os
