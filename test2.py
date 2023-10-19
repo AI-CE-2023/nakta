@@ -34,13 +34,13 @@ def load(
     world_size: int,
 ) -> LLaMA:
     start_time = time.time()
-    # checkpoints = sorted(Path(ckpt_dir).glob("*.pth"))
-    # assert world_size == len(
-    #     checkpoints
-    # ), f"Loading a checkpoint for MP={len(checkpoints)} but world size is {world_size}"
-    # ckpt_path = checkpoints[local_rank]
+    checkpoints = sorted(Path(ckpt_dir).glob("*.pth"))
+    assert world_size == len(
+        checkpoints
+    ), f"Loading a checkpoint for MP={len(checkpoints)} but world size is {world_size}"
+    ckpt_path = checkpoints[local_rank]
     print("Loading")
-    # checkpoint = torch.load(ckpt_path, map_location="cpu")
+    checkpoint = torch.load(ckpt_path, map_location="cpu")
     with open(Path(ckpt_dir) / "params.json", "r") as f:
         params = json.loads(f.read())
 
@@ -50,7 +50,7 @@ def load(
     torch.set_default_tensor_type(torch.cuda.HalfTensor)
     model = Transformer(model_args)
     torch.set_default_tensor_type(torch.FloatTensor)
-    # model.load_state_dict(checkpoint, strict=False)
+    model.load_state_dict(checkpoint, strict=False)
 
     generator = LLaMA(model, tokenizer)
     print(f"Loaded in {time.time() - start_time:.2f} seconds")
@@ -62,7 +62,7 @@ def main(
     tokenizer_path: str,
     ctx_len: int = 70,
     follow_len: int = 40,
-    batch_size: int = 64,
+    batch_size: int = 16,
 ):
     local_rank, world_size = setup_model_parallel()
     if local_rank > 0:
@@ -82,19 +82,23 @@ def main(
     #     world_size,
     # )
 
-    time.sleep(10)
-
+    # time.sleep(10)
+    torch.manual_seed(0)
     # tokens = torch.randint(1, 32000, (batch_size, ctx_len)).cuda()
+    ctx = torch.load("ctx.pt").cuda()
+    follow = torch.load("follow.pt").cuda()
+    tokens = torch.cat((ctx.repeat(4, 1), follow), dim=-1)
+    # torch.save(tokens.cpu(), "./tokens.pt")
     # print(tokens.shape)
-    # t_list = []
-    # for _ in range(10):
-    #     a = time.time()
-    #     results = generator.model.forward(tokens, 0)
-    #     b = time.time()
-    #     t_list.append(b - a)
-    #     print(b - a)
-    # print(results.shape)
-    # # torch.save(results, "./original.pt")
+    t_list = []
+    for _ in range(10):
+        a = time.time()
+        results = generator.model.forward(tokens, 0)
+        b = time.time()
+        t_list.append(b - a)
+        print(b - a)
+    print(results.shape)
+    torch.save(results, "./original.pt")
 
 
 if __name__ == "__main__":

@@ -186,7 +186,8 @@ def write_model(input_base_path, model_size):
     state_dict_1 = {
         key: value
         for key, value in state_dict.items()
-        if "layers.0." <= key <= "layers.29." or key == "tok_embeddings.weight"
+        if ("layers." in key and (0 <= int(key.split(".")[1]) <= 29))
+        or (key == "tok_embeddings.weight")
     }
     state_dict_2 = {
         key.replace(
@@ -195,7 +196,7 @@ def write_model(input_base_path, model_size):
         if "layers." in key
         else key: value
         for key, value in state_dict.items()
-        if "layers.30." <= key <= "layers.59."
+        if ("layers." in key and (30 <= int(key.split(".")[1]) <= 59))
         or key in ["norm.weight", "output.weight"]
     }
 

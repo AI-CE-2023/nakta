@@ -1,8 +1,8 @@
 {
     "model_name": "nakta",
-    "inference_time": 809.873,
-    "preprocessing time": 14.666870832443237,
-    "model load time": 80.54972267150879,
+    "inference_time": 799.883,
+    "preprocessing time": 9.878819942474365,
+    "model load time": 18.505454778671265,
     "cache": true,
-    "acc norm": 0.8313085042820155
+    "acc norm": 0.8312089225253934
 }

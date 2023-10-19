@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -78,14 +78,26 @@ class Attention(nn.Module):
             xq, xk = self.rotary_emb(xqk, seqlen_offset=0)
         elif cache_info[0] == 0:
             xq, xk = self.rotary_emb(xqk, seqlen_offset=0)
-            self.xq_cache[cache_info[1]] = xq
-            self.xk_cache[cache_info[1]] = xk
-            self.xv_cache[cache_info[1]] = xv
+            self.xq_cache[cache_info[1]] = xq.cpu()
+            self.xk_cache[cache_info[1]] = xk.cpu()
+            self.xv_cache[cache_info[1]] = xv.cpu()
         else:
             # Load the cached values and expand them along the batch dimension
-            xq_cached = self.xq_cache[cache_info[1]].repeat(cache_info[2], 1, 1, 1)
-            xk_cached = self.xk_cache[cache_info[1]].repeat(cache_info[2], 1, 1, 1)
-            xv_cached = self.xv_cache[cache_info[1]].repeat(cache_info[2], 1, 1, 1)
+            xq_cached = (
+                self.xq_cache[cache_info[1]]
+                .to(xv.device)
+                .repeat(cache_info[2], 1, 1, 1)
+            )
+            xk_cached = (
+                self.xk_cache[cache_info[1]]
+                .to(xv.device)
+                .repeat(cache_info[2], 1, 1, 1)
+            )
+            xv_cached = (
+                self.xv_cache[cache_info[1]]
+                .to(xv.device)
+                .repeat(cache_info[2], 1, 1, 1)
+            )
 
             # Compute the new rotary embeddings for xq and xk
             xq_new, xk_new = self.rotary_emb(xqk, seqlen_offset=cache_info[0])

@@ -17,13 +17,14 @@ pip uninstall -y triton
 pip install -U --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/Triton-Nightly/pypi/simple/ triton-nightly==2.1.0.dev20230822000928
 
 # install custom kernel
+cd ..
 git clone https://github.com/AI-CE-2023/flash.git
 cd flash
 make install
 cd ..
 
-# install nakta
-git clone https://github.com/AI-CE-2023/nakta.git
+# # install nakta
+# git clone https://github.com/AI-CE-2023/nakta.git
 cd nakta
 pip install .
 
