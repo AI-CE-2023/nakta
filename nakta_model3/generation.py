@@ -9,6 +9,8 @@ from .tokenizer import Tokenizer
 
 
 def _remove_padding(output, batch_info):
+    if batch_info == -1:
+        return output
     # Flatten the sequences based on batch_info
     flattened_output = torch.cat(
         [output[i, : batch_info[i]] for i in range(len(batch_info))], dim=0
@@ -17,6 +19,8 @@ def _remove_padding(output, batch_info):
 
 
 def _rebuild_padding(Q, batch_info):
+    if batch_info == -1:
+        return Q
     # Reshape and pad sequences based on batch_info
     max_len = max(batch_info)
     padded_seqs = torch.stack(
@@ -106,23 +110,32 @@ class LLaMA:
         ctx_tokens = (
             torch.randint(1, 32001, (batch_size // follow, ctx_len)).cuda().long()
         )
+        ctx_info = -1
+
         follow_tokens = torch.randint(1, 32001, (batch_size, follow_len)).cuda().long()
+        follow_info = [follow_len - 30 for _ in range(batch_size - 1)]
+        follow_info.append(follow_len)
+
+        follow_tokens = _remove_padding(follow_tokens, follow_info)
+        print(f"follow tokens shape: {follow_tokens.shape}")
 
         if cached:
             for _ in range(2):
-                self.model.forward(ctx_tokens, (0, 1, follow))
-                self.model.forward(follow_tokens, (ctx_len, 1, follow))
+                self.model.forward(ctx_tokens, (0, 1, follow), ctx_info)
+                self.model.forward(follow_tokens, (ctx_len, 1, follow), follow_info)
 
             for _ in range(2):
                 torch.cuda.synchronize()
                 torch.cuda.nvtx.range_push("forward")
 
                 torch.cuda.nvtx.range_push("ctx")
-                self.model.forward(ctx_tokens, (0, 1, follow))
+                self.model.forward(ctx_tokens, (0, 1, follow), ctx_info)
                 torch.cuda.nvtx.range_pop()
 
                 torch.cuda.nvtx.range_push("follow")
-                result = self.model.forward(follow_tokens, (ctx_len, 1, follow))
+                result = self.model.forward(
+                    follow_tokens, (ctx_len, 1, follow), follow_info
+                )
                 torch.cuda.nvtx.range_pop()
 
                 torch.cuda.nvtx.range_pop()
@@ -149,7 +162,7 @@ class LLaMA:
                 result = self.model.forward(tokens, cached_info, batch_info)
                 torch.cuda.nvtx.range_pop()
                 torch.cuda.synchronize()
-        result = _rebuild_padding(result, batch_info)
+            result = _rebuild_padding(result, batch_info)
         return result
 
     def bench(self, batch, cache: bool):

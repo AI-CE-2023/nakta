@@ -34,6 +34,8 @@ class ModelArgs:
 
 def _remove_padding(output, batch_info):
     # Flatten the sequences based on batch_info
+    if batch_info == -1:
+        return output
     flattened_output = torch.cat(
         [output[i, : batch_info[i]] for i in range(len(batch_info))], dim=0
     )
@@ -42,6 +44,8 @@ def _remove_padding(output, batch_info):
 
 def _rebuild_padding(Q, batch_info):
     # Reshape and pad sequences based on batch_info
+    if batch_info == -1:
+        return Q
     max_len = max(batch_info)
     padded_seqs = torch.stack(
         [
@@ -136,12 +140,16 @@ class Attention(nn.Module):
         output = (
             output.transpose(1, 2).contiguous().view(bsz, seqlen + cache_info[0], -1)
         )
+        # if layer_id == 59 and cache_info[0] > 1:
+        #     print(f"attention output: {output.shape}")
         if layer_id != 59 and cache_info[1] != -1:
             output = output[:, cache_info[0] :, :]
 
         # ---attention end---
-        output = _remove_padding(output, batch_info)
+        if layer_id == 59:
+            return self.wo(output)
 
+        output = _remove_padding(output, batch_info)
         return self.wo(output)
 
 
@@ -216,13 +224,13 @@ class TransformerBlock(nn.Module):
         elif self.layer_id == 59:
             if cache_info[0] != 0:
                 cache = self.cached_x[cache_info[1]].repeat(cache_info[2], 1, 1)
-                # to do: set batch size
-                x_concat = torch.cat(
-                    (cache.view(64, -1, 1664), _rebuild_padding(x, batch_info)), dim=1
-                )
-                h = x_concat + self.attention.forward(
+                x_concat = torch.cat((cache, _rebuild_padding(x, batch_info)), dim=1)
+
+                h_attn = self.attention.forward(
                     self.attention_norm(x), cache_info, self.layer_id, batch_info
                 )
+
+                h = x_concat + h_attn
             else:
                 self.cached_x[cache_info[1]] = x
                 h = x + self.attention.forward(
