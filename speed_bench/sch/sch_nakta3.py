@@ -10,6 +10,7 @@ from datasets import load_dataset
 from torch.utils.data import DataLoader, Dataset
 
 from nakta_model import Tokenizer
+from nakta_model3.model import _remove_padding
 
 
 class SpeedDataset(Dataset):
@@ -144,6 +145,7 @@ class SpeedDataset(Dataset):
         std_following = math.sqrt(variance)
 
         padded_followings = [f + [0] * (max_following - len(f)) for f in new_followings]
+
         following_tokens = torch.tensor(padded_followings, dtype=torch.long).to(
             self.device
         )
@@ -157,11 +159,22 @@ class SpeedDataset(Dataset):
             .view(following_tokens.shape[0], -1)
         )
 
-        assert ctx_tokens.shape[0] * 4 == following_tokens.shape[0]
+        following_lens = (
+            torch.tensor(following_lens, dtype=torch.long)
+            .reshape(len(following_lens) // 4, 4)
+            .permute(1, 0)
+            .contiguous()
+            .flatten()
+            .tolist()
+        )
+
+        following_tokens_in = _remove_padding(following_tokens, following_lens)
+
+        # assert ctx_tokens.shape[0] * 4 == following_tokens.shape[0]
 
         return (
             ctx_tokens,
-            following_tokens,
+            following_tokens_in,
             min_ctx,
             min_following,
             std_following / avg_following,
@@ -169,6 +182,8 @@ class SpeedDataset(Dataset):
             f_lens,
             targets,
             fs_lens,
+            following_lens,
+            # following_tokens,
         )
 
     def _list_chunk(self, lst, n):

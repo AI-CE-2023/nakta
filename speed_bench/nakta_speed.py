@@ -17,6 +17,7 @@ from tqdm import tqdm
 
 from nakta_model import LLaMA, ModelArgs, Tokenizer, Transformer
 
+
 def setup_model_parallel() -> Tuple[int, int]:
     local_rank = int(os.environ.get("LOCAL_RANK", -1))
     world_size = int(os.environ.get("WORLD_SIZE", -1))
@@ -119,7 +120,7 @@ def main(
     #     validset = pickle.load(fr)
 
     default_batch_size = 16
-    candidate_mtp = 6
+    candidate_mtp = 1
     cache = True
     order = "descending"
 
@@ -169,6 +170,9 @@ def main(
             .contiguous()
             .view(result.shape[0], result.shape[1], -1)
         )
+        if local_rank == 0:
+            torch.save(result, "./ref.pt")
+            torch.save(following_tokens, "./f_ref.pt")
         # ctx_tokens = ctx_tokens.cpu()
         ctx_tokens = ctx_tokens.repeat(4, 1)
         # following_tokens = following_tokens.cpu()
@@ -225,9 +229,21 @@ def main(
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run the main function with command line arguments.")
-    parser.add_argument("--ckpt_dir", type=str, default="../weights/modified/30B", help="Checkpoint directory path")
-    parser.add_argument("--tokenizer_path", type=str, default="../weights/original/tokenizer.model", help="Tokenizer path")
+    parser = argparse.ArgumentParser(
+        description="Run the main function with command line arguments."
+    )
+    parser.add_argument(
+        "--ckpt_dir",
+        type=str,
+        default="../weights/modified/30B",
+        help="Checkpoint directory path",
+    )
+    parser.add_argument(
+        "--tokenizer_path",
+        type=str,
+        default="../weights/original/tokenizer.model",
+        help="Tokenizer path",
+    )
 
     args = parser.parse_args()
     main(args.ckpt_dir, args.tokenizer_path)
