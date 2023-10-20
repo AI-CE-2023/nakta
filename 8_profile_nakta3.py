@@ -86,5 +86,5 @@ if __name__ == "__main__":
     fire.Fire(main)
 
 """
-CUDA_LAUNCH_BLOCKING=1 nsys profile -w true -t cuda,nvtx,osrt,cudnn,cublas --force-overwrite true -o ./model_profile/nakta3.nsys-rep torchrun --nproc_per_node 4 8_profile_nakta3.py --ckpt_dir ./weights/modified/30B --tokenizer_path ./weights/original/tokenizer.model
+CUDA_LAUNCH_BLOCKING=1 nsys profile -w true -t cuda,nvtx,osrt,cudnn,cublas --force-overwrite true -o ./model_profile/nakta3_c.nsys-rep torchrun --nproc_per_node 4 8_profile_nakta3.py --ckpt_dir ./weights/modified/30B --tokenizer_path ./weights/original/tokenizer.model
 """

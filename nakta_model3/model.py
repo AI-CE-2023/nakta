@@ -13,6 +13,7 @@ from fairscale.nn.model_parallel.layers import (
 from nakta_attn import silu_and_mul
 from torch import nn
 from torch.nn.functional import scaled_dot_product_attention
+from torch.nn.utils.rnn import pad_sequence
 
 from .kernel.Emb import RotaryEmbedding
 from .kernel.Norm import RMSNorm
@@ -43,20 +44,10 @@ def _remove_padding(output, batch_info):
 
 
 def _rebuild_padding(Q, batch_info):
-    # Reshape and pad sequences based on batch_info
     if batch_info == -1:
         return Q
-    max_len = max(batch_info)
-    padded_seqs = torch.stack(
-        [
-            F.pad(
-                Q[sum(batch_info[:i]) : sum(batch_info[: i + 1])],
-                (0, 0, 0, max_len - batch_info[i]),
-            )
-            for i in range(len(batch_info))
-        ]
-    )
-    return padded_seqs
+    Q = Q.split(batch_info)
+    return pad_sequence(Q, batch_first=True)
 
 
 class Attention(nn.Module):
