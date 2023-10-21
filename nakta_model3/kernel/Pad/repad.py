@@ -4,58 +4,64 @@ from time import perf_counter
 import torch
 import triton
 import triton.language as tl
-from torch.nn.utils.rnn import pad_sequence
+
+torch.set_printoptions(profile="full")
+torch.set_printoptions(linewidth=300, sci_mode=False, precision=4)
 
 
 @triton.jit
-def split_pad_kernel_corrected(
+def split_pad_kernel(
     input_ptr,
     output_ptr,
     start_ptr,
-    end_ptr,
-    max_len,
+    len_ptr,
     hidden_dim,
+    stride_i0,
+    stride_o0,
+    stride_o1,
     BLOCK_SIZE: tl.constexpr,
 ):
     pid = tl.program_id(axis=0)
     bid = tl.program_id(axis=1)
 
     i_start = tl.load(start_ptr + bid)
-    i_end = tl.load(end_ptr + bid)
+    len = tl.load(len_ptr + bid)
 
-    block_start = pid * BLOCK_SIZE
+    off = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    mask = off < len * hidden_dim
+    vec = tl.load(input_ptr + i_start * stride_i0 + off, mask=mask)
 
-    off_1 = i_start * hidden_dim + block_start + tl.arange(0, BLOCK_SIZE)
-    mask = off_1 < i_end * hidden_dim
-    x = tl.load(input_ptr + off_1, mask=mask)
+    off1 = off // hidden_dim
+    off2 = off % hidden_dim
 
-    off_2 = bid * max_len * hidden_dim + block_start + tl.arange(0, BLOCK_SIZE)
-    mask = block_start + tl.arange(0, BLOCK_SIZE) < (i_end - i_start) * hidden_dim
-    tl.store(output_ptr + off_2, x, mask=mask)
+    # mask = off1 < len
+    tl.store(output_ptr + bid * stride_o0 + off1 * stride_o1 + off2, vec, mask=mask)
 
 
-def split_and_pad(input: torch.Tensor, batch_set) -> torch.Tensor:
+def split_and_pad(input: torch.Tensor, batch_info_set) -> torch.Tensor:
+    if type(batch_info_set) == int:
+        return input
     assert input.ndim == 2
-
-    batch_size, max_len, pos_end, pos_start = batch_set
-
-    out = torch.zeros((batch_size, max_len, input.size(1))).cuda()
-    split_pad_kernel_corrected[(32, batch_size)](
+    assert input.is_contiguous()
+    batch_info, batch_size, hidden_dim, max_len, start = batch_info_set
+    output = torch.zeros(
+        (batch_size, max_len, hidden_dim), device=input.device, dtype=torch.float16
+    )
+    split_pad_kernel[
+        lambda meta: (triton.cdiv(hidden_dim * max_len, meta["BLOCK_SIZE"]), batch_size)
+    ](
         input_ptr=input,
-        output_ptr=out,
-        start_ptr=pos_start,
-        end_ptr=pos_end,
-        max_len=max_len,
-        hidden_dim=input.size(1),
-        BLOCK_SIZE=1024,
+        output_ptr=output,
+        start_ptr=start,
+        len_ptr=batch_info,
+        hidden_dim=hidden_dim,
+        stride_i0=input.stride(0),
+        stride_o0=output.stride(0),
+        stride_o1=output.stride(1),
+        BLOCK_SIZE=2048,
     )
 
-    return out
-
-
-def torch_native(Q, batch_info):
-    Q = Q.split(batch_info)
-    return pad_sequence(Q, batch_first=True)
+    return output
 
 
 @contextmanager
@@ -65,37 +71,51 @@ def catchtime() -> float:
     print(f"Time: {perf_counter() - start:.5f} seconds")
 
 
-def adjust_batch_info_corrected(batch_info, target_sum):
-    """Adjust the elements of batch_info so that they sum up to target_sum."""
-    diff = int(target_sum - batch_info.sum().item())
-    quotient, remainder = divmod(diff, len(batch_info))
+def create_batch_info_set(batch_info, hidden_dim):
+    batch_size = len(batch_info)
+    max_len = torch.max(batch_info).item()
+    start = torch.zeros(
+        batch_size,
+        dtype=torch.long,
+        device=batch_info.device,
+    )
+    start[1:] = torch.cumsum(batch_info, dim=0)[:-1]
 
-    # Distribute the difference uniformly across the elements
-    batch_info += quotient
-    for i in range(remainder):
-        batch_info[i] += 1
+    return ([batch_info, batch_size, hidden_dim, max_len, start],)
 
-    return batch_info
+
+def create_batch_info_set2(batch_info, hidden_dim):
+    batch_size = len(batch_info)
+    max_len = torch.max(batch_info).item()
+    start = torch.zeros(
+        batch_size,
+        dtype=torch.long,
+        device=batch_info.device,
+    )
+    start[1:] = torch.cumsum(batch_info, dim=0)[:-1]
+
+    return (
+        [batch_info, batch_size, hidden_dim, max_len, start],
+        [batch_info, batch_size, hidden_dim * 2, max_len, start],
+        [batch_info, batch_size, hidden_dim * 4, max_len, start],
+    )
 
 
 def main():
-    batch_size = 64
-    eff_seqlen = 128
-    hidden_dim = 1610
+    batch_size = 24 * 4
+    eff_seqlen = 100
+    hidden_dim = 3328
 
-    batch_info = torch.randint(low=10, high=eff_seqlen, size=(batch_size,)).cuda()
-    q = torch.randn((sum(batch_info), hidden_dim)).cuda()
+    batch_info = torch.randint(
+        low=20, high=eff_seqlen, size=(batch_size,), device="cuda"
+    )
+    batch_info_set = create_batch_info_set(batch_info, hidden_dim)
+    # batch_info = torch.LongTensor([4, 3, 2, 3]).cuda()
+    q = torch.randn(
+        size=(batch_size * batch_info.sum().item(), hidden_dim), device="cuda"
+    )
 
-    batch_size = len(batch_info)
-    max_len = torch.max(batch_info).item()
-    pos_end = torch.cumsum(batch_info, dim=0)
-    pos_start = pos_end - batch_info[0]
-
-    batch_set = (batch_size, max_len, pos_end, pos_start)
-
-    batch_info_native = batch_info.tolist()
-    print(q.shape)
-    print(sum(batch_info_native))
+    print("batch_info:", batch_info, batch_info.float().mean().item())
 
     for _ in range(10):
         with catchtime():
@@ -113,18 +133,17 @@ def main():
                 ]
             )
     print("-" * 10)
+    # print(seqs1)
     for _ in range(10):
         with catchtime():
-            seqs2 = split_and_pad(q, batch_set)
-    print("-" * 10)
-    for _ in range(10):
-        with catchtime():
-            seqs3 = torch_native(q, batch_info_native)
+            seqs2 = split_and_pad(q, batch_info_set)
+
+    # print(seqs2)
 
     dseq = seqs1 - seqs2
     dseq.abs_()
     dseq = dseq.cpu()
-    print(dseq.mean(), dseq.std(), dseq.max(), dseq.min())
+    print("Mean:", dseq.mean(), "Max:", dseq.max())
 
 
 if __name__ == "__main__":

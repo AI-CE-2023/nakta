@@ -12,7 +12,7 @@ import torch
 from fairscale.nn.model_parallel.initialize import initialize_model_parallel
 
 # test
-from nakta_model3 import LLaMA, ModelArgs, Tokenizer, Transformer
+from nakta_model4 import LLaMA, ModelArgs, Tokenizer, Transformer
 
 
 def setup_model_parallel() -> Tuple[int, int]:
@@ -80,11 +80,12 @@ def main(
     # if local_rank == 0:
     #     torch.save(generator.model.cpu().state_dict(), "./test.pt")
     # torch.save(results, "./nakta.pt")
+    print(results.shape)
 
 
 if __name__ == "__main__":
     fire.Fire(main)
 
 """
-CUDA_LAUNCH_BLOCKING=1 nsys profile -w true -t cuda,nvtx,osrt,cudnn,cublas --force-overwrite true -o ./model_profile/nakta3_c.nsys-rep torchrun --nproc_per_node 4 8_profile_nakta3.py --ckpt_dir ./weights/modified/30B --tokenizer_path ./weights/original/tokenizer.model
+CUDA_LAUNCH_BLOCKING=1 nsys profile -w true -t cuda,nvtx,osrt,cudnn,cublas --force-overwrite true -o ./model_profile/nakta4_c.nsys-rep torchrun --nproc_per_node 4 9_profile_nakta4.py --ckpt_dir ./weights/modified/30B --tokenizer_path ./weights/original/tokenizer.model
 """

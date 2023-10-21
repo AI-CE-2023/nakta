@@ -7,7 +7,7 @@ ckpt_dir=${1:-./weights/modified/30B}
 tokenizer_path=${2:-./weights/original/tokenizer.model}
 
 start=$(date +%s.%N)
-echo ${start}
+# echo ${start}
 torchrun --nproc_per_node 4 speed_bench/nakta_speed.py --ckpt_dir ${ckpt_dir} --tokenizer_path ${tokenizer_path}
 finish=$(date +%s.%N)
 
