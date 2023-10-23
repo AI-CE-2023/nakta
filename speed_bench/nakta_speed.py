@@ -170,9 +170,9 @@ def main(
             .contiguous()
             .view(result.shape[0], result.shape[1], -1)
         )
-        if local_rank == 0:
-            torch.save(result, "./ref.pt")
-            torch.save(following_tokens, "./f_ref.pt")
+        # if local_rank == 0:
+        #     torch.save(result, "./ref.pt")
+        #     torch.save(following_tokens, "./f_ref.pt")
         # ctx_tokens = ctx_tokens.cpu()
         ctx_tokens = ctx_tokens.repeat(4, 1)
         # following_tokens = following_tokens.cpu()

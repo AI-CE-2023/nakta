@@ -63,7 +63,7 @@ def main(
     tokenizer_path: str,
     ctx_len: int = 60,
     follow_len: int = 40,
-    batch_size: int = 64,
+    batch_size: int = 32,
 ):
     local_rank, world_size = setup_model_parallel()
     if local_rank > 0:

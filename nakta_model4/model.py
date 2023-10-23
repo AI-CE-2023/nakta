@@ -13,7 +13,7 @@ from fairscale.nn.model_parallel.layers import (
 from nakta_attn import silu_and_mul
 from torch import nn
 from torch.nn.functional import scaled_dot_product_attention
-from torch.nn.utils.rnn import pad_sequence
+from xformers.ops import memory_efficient_attention
 
 from .kernel.Emb import RotaryEmbedding
 from .kernel.Norm import RMSNorm
@@ -31,23 +31,6 @@ class ModelArgs:
 
     max_seq_len: int = 512
     max_batch_size: int = 512
-
-
-def _remove_padding(output, batch_info):
-    # Flatten the sequences based on batch_info
-    if type(batch_info) == int:
-        return output
-    flattened_output = torch.cat(
-        [output[i, : batch_info[i]] for i in range(len(batch_info))], dim=0
-    )
-    return flattened_output
-
-
-def _rebuild_padding(Q, batch_info):
-    if type(batch_info) == int:
-        return Q
-    Q = Q.split(batch_info)
-    return pad_sequence(Q, batch_first=True)
 
 
 class Attention(nn.Module):
@@ -85,65 +68,34 @@ class Attention(nn.Module):
 
         self.split_val = args.n_heads * self.head_dim
 
-        self.xq_cache = {}
-        self.xk_cache = {}
-        self.xv_cache = {}
+    def forward(self, x: torch.Tensor, mask, offsts, layer_id):
+        # input shape : [seqlen, hidden]
+        bsz_x_seqlen, seqlen = x.shape
 
-    def forward(self, x: torch.Tensor, cache_info, layer_id, batch_info):
         xqk = self.wqk(x)
         xv = self.wv(x)
 
-        # xqk = _rebuild_padding(xqk, batch_info)
-        # xv = _rebuild_padding(xv, batch_info)
-        # ---attention start---
-        bsz_x_seqlen, _ = xv.shape
+        # rotary input [seqlen, 1, 2, localheads, head_dim]
+        xqk = xqk.view(bsz_x_seqlen, 1, 2, self.n_local_heads, self.head_dim)
+        # value 는 rotary 통과할 필요 없음
+        # value shape [1, seqlen, localhead, head_dim]
+        xv = xv.view(1, bsz_x_seqlen, self.n_local_heads, self.head_dim)
 
-        xqk = xqk.view(bsz_x_seqlen, 2, self.n_local_heads, self.head_dim)
-        xq = xqk[:, 0, :, :]
-        xk = xqk[:, 1, :, :]
-        xv = xv.view(bsz_x_seqlen, self.n_local_heads, self.head_dim)
+        # rotary output [seqlen, 1, localheads, head_dim]
+        xq, xk = self.rotary_emb(xqk, seqlen_offset=offsts)
 
-        if cache_info[1] == -1:
-            xq, xk = self.rotary_emb(xqk, seqlen_offset=0)
-        elif cache_info[0] == 0:
-            # To do: rotary kernel 수정
-            # xq, xk = self.rotary_emb(xqk, seqlen_offset=0)
-            self.xq_cache[cache_info[1]] = xq
-            self.xk_cache[cache_info[1]] = xk
-            self.xv_cache[cache_info[1]] = xv
-        else:
-            # Load the cached values and expand them along the batch dimension
-            xq_cached = self.xq_cache[cache_info[1]]
-            xk_cached = self.xk_cache[cache_info[1]]
-            xv_cached = self.xv_cache[cache_info[1]]
+        # attention input [1, seqlen, localheads, head_dim]
+        xq = xq.transpose(0, 1).contiguous()
+        keys = xk.transpose(0, 1).contiguous()
+        # values = xv.transpose(1, 2).contiguous()
 
-            # Compute the new rotary embeddings for xq and xk
-            # xq_new, xk_new = self.rotary_emb(xqk, seqlen_offset=cache_info[0])
+        # output [1, localheads, seqlen, head_dim]
+        # output = scaled_dot_product_attention(xq, keys, values, attn_mask=mask)
+        output = memory_efficient_attention(xq, keys, xv, attn_bias=mask)
 
-            # Concatenate the cached values with the new values
-            xq = torch.cat((xq_cached, xq), dim=0)
-            xk = torch.cat((xk_cached, xk), dim=0)
-            xv = torch.cat((xv_cached, xv), dim=0)
+        # output [seqlen, hidden]
+        output = output.view(bsz_x_seqlen, -1)
 
-        xq = xq.unsqueeze(dim=0).transpose(1, 2).contiguous()
-        keys = xk.unsqueeze(dim=0).transpose(1, 2).contiguous()
-        values = xv.unsqueeze(dim=0).transpose(1, 2).contiguous()
-        if type(batch_info) == int:
-            output = scaled_dot_product_attention(xq, keys, values, is_causal=True)
-        else:
-            output = scaled_dot_product_attention(xq, keys, values)
-
-        output = output.transpose(1, 2).contiguous().view(output.shape[2], -1)
-
-        if layer_id != 59 and cache_info[1] != -1:
-            output = output[:bsz_x_seqlen, :]
-        # ---attention end---
-        if layer_id == 59:
-            # output = _rebuild_padding(output, batch_info)
-            output = output[:bsz_x_seqlen, :]
-            return self.wo(output)
-
-        # output = _remove_padding(output, batch_info)
         return self.wo(output)
 
 
@@ -203,44 +155,17 @@ class TransformerBlock(nn.Module):
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
 
         self.cached_x = {}
-        self.ctx_len = 0
 
     def forward(
         self,
         x: torch.Tensor,
-        cache_info,
-        batch_info
+        mask,
+        offsets
         # mask: Optional[torch.Tensor],
     ):
-        if cache_info[1] == -1:
-            h = x + self.attention.forward(
-                self.attention_norm(x), cache_info, self.layer_id, batch_info
-            )
-        elif self.layer_id == 59:
-            if cache_info[0] != 0:
-                # cache = self.cached_x[cache_info[1]]
-                # cache = cache.view(len(batch_info) // 4, self.ctx_len, 6656).repeat(
-                #     cache_info[2], 1, 1
-                # )
-                # x_concat = torch.cat((cache, _rebuild_padding(x, batch_info)), dim=1)
-
-                h_attn = self.attention.forward(
-                    self.attention_norm(x), cache_info, self.layer_id, batch_info
-                )
-
-                h = x + h_attn
-
-            else:
-                # self.cached_x[cache_info[1]] = x
-                self.ctx_len = batch_info
-                h = x + self.attention.forward(
-                    self.attention_norm(x), cache_info, self.layer_id, batch_info
-                )
-        else:
-            h = x + self.attention.forward(
-                self.attention_norm(x), cache_info, self.layer_id, batch_info
-            )
-
+        h = x + self.attention.forward(
+            self.attention_norm(x), mask, offsets, self.layer_id
+        )
         out = h + self.feed_forward.forward(self.ffn_norm(h))
         return out
 
@@ -268,27 +193,22 @@ class Transformer(nn.Module):
         )
 
     @torch.inference_mode()
-    def forward(self, tokens: torch.Tensor, cache_info, batch_info):
+    def forward(self, tokens: torch.Tensor, mask, offsets):
         """
         cache_info: Tuple(seqlen_offset: int, cache_key: int, follow_num: int)
         if cache_key == -1: -> Non Cache Mode
         """
-        with torch.backends.cuda.sdp_kernel(
-            enable_flash=False,
-            enable_math=False,
-            enable_mem_efficient=True,
-        ):
-            # _bsz, seqlen = tokens.shape
-            h = self.tok_embeddings(tokens)
-            for i, layer in enumerate(self.layers):
-                h = layer(h, cache_info, batch_info)
-            if cache_info[0] == 0:
-                return None
-            else:
-                h = self.norm(h)
-                output = self.output(h)  # only compute last logits
-                output = _rebuild_padding(output, batch_info)
-                return output.float()
+        # with torch.backends.cuda.sdp_kernel(
+        #     enable_flash=False,
+        #     enable_math=False,
+        #     enable_mem_efficient=True,
+        # ):
+        h = self.tok_embeddings(tokens)
+        for i, layer in enumerate(self.layers):
+            h = layer(h, mask, offsets)
+        h = self.norm(h)
+        output = self.output(h)  # only compute last logits
+        return output.float()
 
 
 import os
@@ -309,4 +229,4 @@ if os.getenv("CUDA_LAUNCH_BLOCKING"):
     scaled_dot_product_attention = nvtx_annotate_function(scaled_dot_product_attention)
     silu_and_mul = nvtx_annotate_function(silu_and_mul)
     silu_and_mul = nvtx_annotate_function(silu_and_mul)
-    silu_and_mul = nvtx_annotate_function(silu_and_mul)
+    memory_efficient_attention = nvtx_annotate_function(memory_efficient_attention)

@@ -5,6 +5,8 @@ import torch
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
 
+from .kernel.mask.mask import create_hellaswag_mask_v5
+from .kernel.mask.offset import create_offset_v4
 from .model import Transformer
 from .tokenizer import Tokenizer
 
@@ -82,7 +84,7 @@ class LLaMA:
             decoded.append(self.tokenizer.decode(t))
         return decoded
 
-    def prof(self, ctx_len: int, follow_len: int, batch_size: int, cached: bool):
+    def prof(self, ctx_lens: int, follow_lens: int):
         """
         Profiles the forward pass of a model using given seq_len and batch_size.
 
@@ -92,69 +94,52 @@ class LLaMA:
         """
 
         torch.manual_seed(0)
+        assert len(ctx_lens) * 4 == len(follow_lens)
 
-        follow = 4
+        ctx = torch.randint(1, 32000, (sum(ctx_lens),))
+        follow = torch.randint(1, 32000, (sum(follow_lens),))
+        tokens = torch.cat([ctx, follow], dim=0).cuda()
 
-        assert batch_size % follow == 0
+        mask = create_hellaswag_mask_v5(ctx_lens, follow_lens, device="cuda")
+        offsets = create_offset_v4(ctx_lens, follow_lens, device="cuda")
+        print("start model")
+        for _ in range(2):
+            self.model.forward(tokens, mask, offsets)
 
-        # Generate random integers between 1 and 32000
-        ctx_tokens = (
-            torch.randint(1, 32001, (batch_size // follow, ctx_len)).cuda().long()
-        )
-        ctx_info = -1
+        for _ in range(2):
+            torch.cuda.synchronize()
+            torch.cuda.nvtx.range_push("forward")
+            result = self.model.forward(tokens, mask, offsets)
+            torch.cuda.nvtx.range_pop()
+            torch.cuda.synchronize()
+        return result
 
-        follow_tokens = torch.randint(1, 32001, (batch_size, follow_len)).cuda().long()
-        follow_info = [follow_len - 30 for _ in range(batch_size - 1)]
-        follow_info.append(follow_len)
+    def test_equal(self, ctx_lens, follow_lens, ctx, follow):
+        """
+        Profiles the forward pass of a model using given seq_len and batch_size.
 
-        follow_tokens = _remove_padding(follow_tokens, follow_info)
-        print(f"follow tokens shape: {follow_tokens.shape}")
+        Parameters:
+        - seq_len (int): The sequence length for the input tokens.
+        - batch_size (int): The number of samples in the batch.
+        """
 
-        if cached:
-            ctx_tokens = ctx_tokens.flatten()
-            for _ in range(2):
-                self.model.forward(ctx_tokens, (0, 1, follow), ctx_len)
-                self.model.forward(follow_tokens, (ctx_len, 1, follow), follow_info)
+        torch.manual_seed(0)
+        assert len(ctx_lens) * 4 == len(follow_lens)
 
-            for _ in range(2):
-                torch.cuda.synchronize()
-                torch.cuda.nvtx.range_push("forward")
+        tokens = torch.cat([ctx, follow], dim=0).cuda()
 
-                torch.cuda.nvtx.range_push("ctx")
-                self.model.forward(ctx_tokens, (0, 1, follow), ctx_info)
-                torch.cuda.nvtx.range_pop()
+        mask = create_hellaswag_mask_v5(ctx_lens, follow_lens, device="cuda")
+        offsets = create_offset_v4(ctx_lens, follow_lens, device="cuda")
+        print("start model")
+        for _ in range(2):
+            self.model.forward(tokens, mask, offsets)
 
-                torch.cuda.nvtx.range_push("follow")
-                result = self.model.forward(
-                    follow_tokens, (ctx_len, 1, follow), follow_info
-                )
-                torch.cuda.nvtx.range_pop()
-
-                torch.cuda.nvtx.range_pop()
-                torch.cuda.synchronize()
-        else:
-            ctx_tokens = ctx_tokens.repeat(follow, 1)
-            tokens = torch.cat((ctx_tokens, follow_tokens), dim=1)
-
-            cached_info = (0, -1, follow)
-            batch_info = [ctx_len + follow_len - 30 for _ in range(batch_size - 1)]
-            batch_info.append(ctx_len + follow_len)
-
-            tokens = _remove_padding(tokens, batch_info)
-            print(f"token shape: {tokens.shape}")
-
-            assert cached_info[1] == -1
-
-            for _ in range(2):
-                self.model.forward(tokens, cached_info, batch_info)
-
-            for _ in range(2):
-                torch.cuda.synchronize()
-                torch.cuda.nvtx.range_push("forward")
-                result = self.model.forward(tokens, cached_info, batch_info)
-                torch.cuda.nvtx.range_pop()
-                torch.cuda.synchronize()
-            result = _rebuild_padding(result, batch_info)
+        for _ in range(2):
+            torch.cuda.synchronize()
+            torch.cuda.nvtx.range_push("forward")
+            result = self.model.forward(tokens, mask, offsets)
+            torch.cuda.nvtx.range_pop()
+            torch.cuda.synchronize()
         return result
 
     def bench(self, batch, cache: bool):

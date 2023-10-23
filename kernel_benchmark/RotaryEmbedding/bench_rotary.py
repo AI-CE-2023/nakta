@@ -86,22 +86,29 @@ def test_rotary_embedding():
 
 @triton.testing.perf_report(
     triton.testing.Benchmark(
-        x_names=["seq_len"],
-        x_vals=[64 * i for i in range(1, 10)],
+        x_names=["batch_size"],
+        x_vals=[128 * i for i in range(70, 75)],
         line_arg="provider",
         line_vals=["triton", "torch"],
         line_names=["Triton", "Torch"],
         styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
         ylabel="GB/s",
         plot_name="rotary-emb-forward",
-        args={"hidden": 128, "dtype": torch.float16, "mode": "forward"},
+        args={"hidden": 128, "seq_len": 1, "dtype": torch.float16, "mode": "forward"},
     )
 )
 def bench_layer_norm(
-    hidden, seq_len, dtype, provider, mode="backward", eps=1e-5, device="cuda"
+    batch_size,
+    hidden,
+    seq_len,
+    dtype,
+    provider,
+    mode="backward",
+    eps=1e-5,
+    device="cuda",
 ):
     # create data
-    x_shape = (64, seq_len, 13, hidden)
+    x_shape = (batch_size, seq_len, 13, hidden)
     query = torch.randn(x_shape, dtype=dtype, device="cuda")
     key = torch.randn(x_shape, dtype=dtype, device="cuda")
     qk = torch.cat((query.unsqueeze(2), key.unsqueeze(2)), dim=2)

@@ -74,8 +74,11 @@ def main(
         local_rank,
         world_size,
     )
+    test_data = torch.load("./test_data.pt").cpu().cuda()
 
-    results = generator.prof(ctx_len, follow_len, batch_size)
+    # results = generator.prof(ctx_len, follow_len, batch_size)
+    results = generator.model.forward(test_data, 0)
+    print(results.shape)
     torch.save(results, "./original.pt")
 
 
