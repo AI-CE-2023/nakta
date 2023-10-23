@@ -270,6 +270,7 @@ class Transformer(nn.Module):
             enable_mem_efficient=True,
         ):
             # _bsz, seqlen = tokens.shape
+
             h = self.tok_embeddings(tokens)
             for i, layer in enumerate(self.layers):
                 h = layer(h, cache_info, batch_info)

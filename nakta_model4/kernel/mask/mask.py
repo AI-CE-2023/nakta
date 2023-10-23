@@ -28,7 +28,9 @@ def create_hellaswag_mask_v5(ctx_lengths, follow_lengths, device="cpu"):
     # Initialize a mask with all zeros (indicating masking) and dtype as torch.bool
     total_length = total_ctx_length + total_follow_length
     mask = torch.zeros(
-        (total_length, total_length + total_length % 8), dtype=torch.bool, device=device
+        (total_length, total_length + (8 - total_length % 8)),
+        dtype=torch.bool,
+        device=device,
     )
 
     # Non-masking for ctx and follow based on their lengths

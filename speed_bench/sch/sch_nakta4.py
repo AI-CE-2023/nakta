@@ -2,15 +2,14 @@ import math
 import random
 from typing import Callable, List, Optional
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
+# import matplotlib.pyplot as plt
+# import numpy as np
+# import pandas as pd
 import torch
 from datasets import load_dataset
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 
 from nakta_model import Tokenizer
-from nakta_model3.model import _remove_padding
 
 
 class SpeedDataset(Dataset):
@@ -76,9 +75,9 @@ class SpeedDataset(Dataset):
     def _sort_tokenized_strings(self):
         """Sorts the tokenized strings based on the specified order."""
         if self.order == "ascending":
-            self.tokenized_strings.sort(key=lambda x: x[2])
+            self.tokenized_strings.sort(key=lambda x: x[3])
         elif self.order == "descending":
-            self.tokenized_strings.sort(key=lambda x: x[2], reverse=True)
+            self.tokenized_strings.sort(key=lambda x: x[3], reverse=True)
         # elif self.order == "None":
         #     pass
         else:
@@ -87,8 +86,8 @@ class SpeedDataset(Dataset):
     def _get_batch_size(self, index):
         """Returns the batch size based on the scheduler or the default value."""
         # To do: Implement
-        if self.batch_scheduler:
-            return self.batch_scheduler(index, self.tokenized_strings[index:])
+        # if self.batch_scheduler:
+        #     return self.batch_scheduler(index, self.tokenized_strings[index:])
         return self.default_batch_size
 
     def _adjust_batch_size(self, ctx, batch_size):
@@ -103,89 +102,28 @@ class SpeedDataset(Dataset):
         """Processes a batch to create context and following tokens."""
         targets = [b[4] for b in batch]
 
-        ctx = [b[0] for b in batch]
-        ctx_lens = [len(c) for c in ctx]
-        min_ctx = min(ctx_lens)
+        ctx_tokens = [torch.tensor(b[0], dtype=torch.long) for b in batch]
+        ctx_lens = [c.shape[0] for c in ctx_tokens]
 
-        f_tokens = [f[0] for b in batch for f in b[1]]
-        f_lens = [f[1] for b in batch for f in b[1]]
-        fs_lens = [f[2] for b in batch for f in b[1]]
-        inp_lens = [f[3] for b in batch for f in b[1]]
+        ctx_tokens = torch.cat(ctx_tokens, dim=0)
 
-        # for_inp_lens = ctx_lens * 4
-        # assert len(for_inp_lens) == len(fs_lens)
-
-        assert len(ctx) * 4 == len(f_tokens)
-
-        group_size = 4
-        new_followings = []
-        for i, f in enumerate(f_tokens):
-            current_ctx = ctx[i // group_size]
-            new_following = current_ctx[min_ctx:] + f
-            new_followings.append(new_following)
-
-        num_groups = len(new_followings) // group_size
-        new_followings = [
-            new_followings[i + j * group_size]
-            for j in range(num_groups)
-            for i in range(group_size)
+        following_tokens = [
+            torch.tensor(f[0], dtype=torch.long) for b in batch for f in b[1]
         ]
-        new_ctx = [c[:min_ctx] for c in ctx]
+        following_tokens = torch.cat(following_tokens, dim=0)
+        follow_lens = [f[1] for b in batch for f in b[1]]
+        follow_string_lens = [f[2] for b in batch for f in b[1]]
 
-        ctx_tokens = torch.tensor(
-            new_ctx, dtype=torch.long, device=self.device
-        ).flatten()
-
-        following_lens = [len(f) for f in new_followings]
-        max_following = max(following_lens)
-        min_following = min(following_lens)
-        avg_following = sum(following_lens) / len(following_lens)
-
-        mean_following = avg_following
-        squared_diff = [(x - mean_following) ** 2 for x in following_lens]
-        variance = sum(squared_diff) / len(following_lens)
-        std_following = math.sqrt(variance)
-
-        padded_followings = [f + [0] * (max_following - len(f)) for f in new_followings]
-
-        following_tokens = torch.tensor(padded_followings, dtype=torch.long).to(
-            self.device
-        )
-
-        following_tokens = (
-            following_tokens.reshape(
-                following_tokens.shape[0] // 4, 4, following_tokens.shape[1]
-            )
-            .permute(1, 0, 2)
-            .contiguous()
-            .view(following_tokens.shape[0], -1)
-        )
-
-        following_lens = (
-            torch.tensor(following_lens, dtype=torch.long)
-            .reshape(len(following_lens) // 4, 4)
-            .permute(1, 0)
-            .contiguous()
-            .flatten()
-            .tolist()
-        )
-
-        following_tokens_in = _remove_padding(following_tokens, following_lens)
-
+        tokens = torch.cat([ctx_tokens, following_tokens], dim=0).cuda()
         # assert ctx_tokens.shape[0] * 4 == following_tokens.shape[0]
-
+        assert len(ctx_lens) * 4 == len(follow_lens)
         return (
-            ctx_tokens,
-            following_tokens_in,
-            min_ctx,
-            min_following,
-            std_following / avg_following,
-            inp_lens,
-            f_lens,
+            tokens,
+            following_tokens,
+            ctx_lens,
+            follow_lens,
             targets,
-            fs_lens,
-            following_lens,
-            # following_tokens,
+            follow_string_lens,
         )
 
     def _list_chunk(self, lst, n):
@@ -211,7 +149,7 @@ class SpeedDataset(Dataset):
 
             # adjust by followings
             ## Important
-            batch.sort(key=lambda x: x[3])
+            batch.sort(key=lambda x: x[2])
             batch = self._list_chunk(batch, original_batch_size)
             # f_batch_size = self._adjust_f_batch_size(ctx, batch_size)
 
@@ -271,7 +209,7 @@ if __name__ == "__main__":
     #     strings = pickle.load(fr)
     default_batch_size = 16
     # Create the SpeedDatasetTorch object
-    candidate_multipe = 6
+    candidate_multipe = 1
     speed_dataset_torch = SpeedDataset(
         tokenizer_path="../../weights/original/tokenizer.model",
         order="ascending",
@@ -285,40 +223,40 @@ if __name__ == "__main__":
 
     print(len(speed_dataset_torch.batches))
 
-    # print(speed_dataset_torch.batches[0])
+    # # print(speed_dataset_torch.batches[0])
 
-    # Using DataLoader to load the dataset
-    dataloader = DataLoader(
-        speed_dataset_torch, batch_size=1, shuffle=False, collate_fn=collate_fn
-    )
+    # # Using DataLoader to load the dataset
+    # dataloader = DataLoader(
+    #     speed_dataset_torch, batch_size=1, shuffle=False, collate_fn=collate_fn
+    # )
 
-    # # Print shape of the first batch
-    # first_batch = next(iter(dataloader))
-    # print(first_batch[0].shape)
-    # print(first_batch[1].shape)
+    # # # Print shape of the first batch
+    # # first_batch = next(iter(dataloader))
+    # # print(first_batch[0].shape)
+    # # print(first_batch[1].shape)
 
-    # Gather statistics from the dataset
-    binned_min_ctxs, binned_ratios = speed_dataset_torch.gather_statistics()
+    # # Gather statistics from the dataset
+    # binned_min_ctxs, binned_ratios = speed_dataset_torch.gather_statistics()
 
-    # Convert data to DataFrame and bin
-    heatmap_data = pd.DataFrame({"min_ctx": binned_min_ctxs, "ratios": binned_ratios})
+    # # Convert data to DataFrame and bin
+    # heatmap_data = pd.DataFrame({"min_ctx": binned_min_ctxs, "ratios": binned_ratios})
 
-    heatmap_data = (
-        heatmap_data.groupby(["min_ctx", "ratios"]).size().reset_index(name="counts")
-    )
-    heatmap_pivot = heatmap_data.pivot("min_ctx", "ratios", "counts")
+    # heatmap_data = (
+    #     heatmap_data.groupby(["min_ctx", "ratios"]).size().reset_index(name="counts")
+    # )
+    # heatmap_pivot = heatmap_data.pivot("min_ctx", "ratios", "counts")
 
-    # Plot the heatmap using Seaborn
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(heatmap_pivot, cmap="YlGnBu", annot=True)
+    # # Plot the heatmap using Seaborn
+    # plt.figure(figsize=(10, 8))
+    # sns.heatmap(heatmap_pivot, cmap="YlGnBu", annot=True)
 
-    plt.title(
-        "Heatmap of binned min_ctx vs. binned ((max_following - min_following) / min_following)"
-    )
-    plt.xlabel("Binned std/avg of following lengths")
-    plt.ylabel("Binned min_ctx")
-    plt.tight_layout()
+    # plt.title(
+    #     "Heatmap of binned min_ctx vs. binned ((max_following - min_following) / min_following)"
+    # )
+    # plt.xlabel("Binned std/avg of following lengths")
+    # plt.ylabel("Binned min_ctx")
+    # plt.tight_layout()
 
-    # Save the heatmap as an image
-    plt.savefig(f"binned_heatmap_{default_batch_size}_{candidate_multipe}.png")
-    plt.show()
+    # # Save the heatmap as an image
+    # plt.savefig(f"binned_heatmap_{default_batch_size}_{candidate_multipe}.png")
+    # plt.show()

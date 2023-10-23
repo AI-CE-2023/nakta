@@ -82,16 +82,16 @@ def main(
     follow = torch.randint(1, 32000, (sum(follow_lens),))
     results = generator.test_equal(ctx_lens, follow_lens, ctx, follow)
     print(results.shape)
-    if local_rank == 0:
-        #     torch.save(generator.model.cpu().state_dict(), "./test.pt")
-        ctx = ctx.split(ctx_lens)
-        follow = follow.split(follow_lens)
-        ctx = [i.unsqueeze(dim=0).repeat(4, 1) for i in ctx]
-        ctx = torch.cat(ctx, dim=0)
-        follow = torch.stack(follow, dim=0)
-        tokens = torch.cat([ctx, follow], dim=1)
-        torch.save(tokens, "./test_data.pt")
-        torch.save(results, "./nakta.pt")
+    # if local_rank == 0:
+    #     #     torch.save(generator.model.cpu().state_dict(), "./test.pt")
+    #     ctx = ctx.split(ctx_lens)
+    #     follow = follow.split(follow_lens)
+    #     ctx = [i.unsqueeze(dim=0).repeat(4, 1) for i in ctx]
+    #     ctx = torch.cat(ctx, dim=0)
+    #     follow = torch.stack(follow, dim=0)
+    #     tokens = torch.cat([ctx, follow], dim=1)
+    #     torch.save(tokens, "./test_data.pt")
+    #     torch.save(results, "./nakta.pt")
 
 
 if __name__ == "__main__":

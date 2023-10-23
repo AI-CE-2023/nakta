@@ -4,6 +4,7 @@ from time import perf_counter
 import torch
 import triton
 import triton.language as tl
+from torch.nn.utils.rnn import pad_sequence
 
 torch.set_printoptions(profile="full")
 torch.set_printoptions(linewidth=300, sci_mode=False, precision=4)
@@ -43,10 +44,8 @@ def split_and_pad(input: torch.Tensor, batch_info_set) -> torch.Tensor:
         return input
     assert input.ndim == 2
     assert input.is_contiguous()
-    batch_info, batch_size, hidden_dim, max_len, start = batch_info_set
-    output = torch.zeros(
-        (batch_size, max_len, hidden_dim), device=input.device, dtype=torch.float16
-    )
+    batch_info, batch_size, hidden_dim, max_len, start, output = batch_info_set
+
     split_pad_kernel[
         lambda meta: (triton.cdiv(hidden_dim * max_len, meta["BLOCK_SIZE"]), batch_size)
     ](
@@ -80,8 +79,10 @@ def create_batch_info_set(batch_info, hidden_dim):
         device=batch_info.device,
     )
     start[1:] = torch.cumsum(batch_info, dim=0)[:-1]
-
-    return ([batch_info, batch_size, hidden_dim, max_len, start],)
+    output = torch.zeros(
+        (batch_size, max_len, hidden_dim), device="cuda", dtype=torch.float16
+    )
+    return [batch_info, batch_size, hidden_dim, max_len, start, output]
 
 
 def create_batch_info_set2(batch_info, hidden_dim):
@@ -93,12 +94,30 @@ def create_batch_info_set2(batch_info, hidden_dim):
         device=batch_info.device,
     )
     start[1:] = torch.cumsum(batch_info, dim=0)[:-1]
-
-    return (
-        [batch_info, batch_size, hidden_dim, max_len, start],
-        [batch_info, batch_size, hidden_dim * 2, max_len, start],
-        [batch_info, batch_size, hidden_dim * 4, max_len, start],
+    output1 = torch.zeros(
+        (batch_size, max_len, hidden_dim), device="cuda", dtype=torch.float16
     )
+    output2 = torch.zeros(
+        (batch_size, max_len, hidden_dim * 2), device="cuda", dtype=torch.float16
+    )
+    output3 = torch.zeros(
+        (batch_size, max_len, hidden_dim * 4), device="cuda", dtype=torch.float16
+    )
+    return (
+        # query
+        [batch_info, batch_size, hidden_dim, max_len, start, output1],
+        # key
+        [batch_info, batch_size, hidden_dim * 2, max_len, start, output2],
+        # total
+        [batch_info, batch_size, hidden_dim * 4, max_len, start, output3],
+    )
+
+
+def _rebuild_padding(Q, batch_info):
+    if batch_info == -1:
+        return Q
+    Q = Q.split(batch_info)
+    return pad_sequence(Q, batch_first=True)
 
 
 def main():
@@ -111,9 +130,7 @@ def main():
     )
     batch_info_set = create_batch_info_set(batch_info, hidden_dim)
     # batch_info = torch.LongTensor([4, 3, 2, 3]).cuda()
-    q = torch.randn(
-        size=(batch_size * batch_info.sum().item(), hidden_dim), device="cuda"
-    )
+    q = torch.randn(size=(batch_info.sum().item(), hidden_dim), device="cuda")
 
     print("batch_info:", batch_info, batch_info.float().mean().item())
 
@@ -137,10 +154,18 @@ def main():
     for _ in range(10):
         with catchtime():
             seqs2 = split_and_pad(q, batch_info_set)
-
+    print("-" * 10)
     # print(seqs2)
-
-    dseq = seqs1 - seqs2
+    batch_info = batch_info.tolist()
+    for _ in range(10):
+        with catchtime():
+            seqs3 = _rebuild_padding(q, batch_info)
+    print("-" * 10)
+    # print(seqs1)
+    for _ in range(10):
+        with catchtime():
+            seqs2 = split_and_pad(q, batch_info_set)
+    dseq = seqs2 - seqs3
     dseq.abs_()
     dseq = dseq.cpu()
     print("Mean:", dseq.mean(), "Max:", dseq.max())

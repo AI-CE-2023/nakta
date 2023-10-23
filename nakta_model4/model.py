@@ -91,7 +91,7 @@ class Attention(nn.Module):
 
         # output [1, localheads, seqlen, head_dim]
         # output = scaled_dot_product_attention(xq, keys, values, attn_mask=mask)
-        output = memory_efficient_attention(xq, keys, xv, attn_bias=mask)
+        output = memory_efficient_attention(xq, keys, xv)
 
         # output [seqlen, hidden]
         output = output.view(bsz_x_seqlen, -1)
