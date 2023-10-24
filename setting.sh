@@ -1,3 +1,4 @@
+cd ..
 # set cuda toolkit
 wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
 sudo mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
@@ -17,7 +18,6 @@ pip uninstall -y triton
 pip install -U --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/Triton-Nightly/pypi/simple/ triton-nightly==2.1.0.dev20230822000928
 
 # install custom kernel
-cd ..
 git clone https://github.com/AI-CE-2023/flash.git
 cd flash
 make install
