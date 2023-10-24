@@ -46,10 +46,11 @@ chmod +x ./nakta5_test.sh
 
 
 ## 주요 구현 링크
-[RMSNorm](https://github.com/AI-CE-2023/nakta/blob/main/nakta_model/kernel/Norm/RmsNorm.py)   
-[Rotary Embedding](https://github.com/AI-CE-2023/nakta/blob/main/nakta_model/kernel/Emb/Rotary/rotary.py)   
+[RMSNorm](https://github.com/AI-CE-2023/nakta/blob/main/nakta_model5/kernel/Norm/RmsNorm.py)   
+[Rotary Embedding](https://github.com/AI-CE-2023/nakta/blob/main/nakta_model5/kernel/Emb/Rotary/rotary.py)   
 [SwiGLU](https://github.com/AI-CE-2023/flash/blob/main/csrc/flash_attn/activation_kernel.cu)  
 [Rebuild Padding](https://github.com/AI-CE-2023/nakta/blob/main/nakta_model5/kernel/Pad/repad.py)
+[Batch Scheduler](https://github.com/AI-CE-2023/nakta/blob/main/speed_bench/sch/sch_nakta3.py)
 *Memory Efficient Attention 의 경우 Pytorch 2.0.0 의 구현을 사용하였음.
 
 ## 참고 프로젝트 
