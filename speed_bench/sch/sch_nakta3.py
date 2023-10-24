@@ -9,8 +9,17 @@ import torch
 from datasets import load_dataset
 from torch.utils.data import DataLoader, Dataset
 
-from nakta_model import Tokenizer
-from nakta_model3.model import _remove_padding
+from nakta_model5 import Tokenizer
+
+
+def _remove_padding(output, batch_info):
+    # Flatten the sequences based on batch_info
+    if type(batch_info) == int:
+        return output
+    flattened_output = torch.cat(
+        [output[i, : batch_info[i]] for i in range(len(batch_info))], dim=0
+    )
+    return flattened_output
 
 
 class SpeedDataset(Dataset):

@@ -8,7 +8,7 @@ import torch
 from datasets import load_dataset
 from torch.utils.data import DataLoader, Dataset
 
-from nakta_model import Tokenizer
+from llama_org import Tokenizer
 
 
 class SpeedDataset(Dataset):

@@ -10,7 +10,7 @@ from .tokenizer import Tokenizer
 
 
 def _remove_padding(output, batch_info):
-    if batch_info == -1:
+    if type(batch_info) == int:
         return output
     # Flatten the sequences based on batch_info
     flattened_output = torch.cat(

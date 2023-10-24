@@ -23,11 +23,6 @@ cd flash
 make install
 cd ..
 
-# # install nakta
-# git clone https://github.com/AI-CE-2023/nakta.git
-cd nakta
-pip install .
-
 # install programs
 apt-get update
 apt-get -y install bc

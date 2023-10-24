@@ -35,7 +35,7 @@ class ModelArgs:
 
 def _remove_padding(output, batch_info):
     # Flatten the sequences based on batch_info
-    if batch_info == -1:
+    if type(batch_info) == int:
         return output
     flattened_output = torch.cat(
         [output[i, : batch_info[3][i]] for i in range(len(batch_info[3]))], dim=0
@@ -44,7 +44,7 @@ def _remove_padding(output, batch_info):
 
 
 def _rebuild_padding(Q, batch_info):
-    if batch_info == -1:
+    if type(batch_info) == int:
         return Q
     Q = Q.split(batch_info)
     return pad_sequence(Q, batch_first=True)

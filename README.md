@@ -31,7 +31,11 @@ repository 를 clone 후 다음 스크립트를 실행해주세요.
 chmode +x ./setting.sh  
 ./setting.sh
 ```
-
+### nakta model 설치 
+이 레포지토리에서 다음을 실행합니다.
+```
+pip install .
+```
 ### weight 변환 
 ```
 python convert.py {original weight path} {output path}

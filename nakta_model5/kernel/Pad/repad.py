@@ -115,7 +115,7 @@ def create_batch_info_set2(batch_info, hidden_dim):
 
 
 def _rebuild_padding(Q, batch_info):
-    if batch_info == -1:
+    if type(batch_info) == int:
         return Q
     Q = Q.split(batch_info)
     return pad_sequence(Q, batch_first=True)
