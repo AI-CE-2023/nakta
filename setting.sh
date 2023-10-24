@@ -23,6 +23,10 @@ cd flash
 make install
 cd ..
 
+# install nakta
+cd nakta
+pip install .
+
 # install programs
 apt-get update
 apt-get -y install bc
